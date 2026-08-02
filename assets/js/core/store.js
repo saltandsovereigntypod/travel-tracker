@@ -1,101 +1,29 @@
 import { supabase } from '../services/supabase-client.js';
-
-const STORAGE_KEY = 'wayfarer-workspace-v2';
-const clone = value => JSON.parse(JSON.stringify(value));
-
-export const starterState = {
-  currentUser: { id: 'guest', name: 'Traveler', initials: 'T', plan: 'Local preview' },
-  workspaces: [], projects: [], records: [], templates: [], assets: [], canvasDesigns: [], views: [], members: [],
-  auth: { ready: false, signedIn: false }
-};
-
-let cache = (() => {
-  try { return { ...clone(starterState), ...JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}') }; }
-  catch { return clone(starterState); }
-})();
-
-const initials = name => String(name || 'Traveler').split(/\s+/).map(x => x[0]).join('').slice(0,2).toUpperCase();
-const coverFor = project => project.cover?.gradient || 'linear-gradient(135deg,#9CCFE8,#FFF7ED 62%,#F4B183)';
-
-function mapCloud({ user, profile, workspaces, members, projects, records, views, designs, templates, assets }) {
-  return {
-    currentUser: { id: user.id, name: profile?.display_name || user.email?.split('@')[0] || 'Traveler', initials: initials(profile?.display_name || user.email), email: user.email, plan: 'Cloud workspace' },
-    workspaces: workspaces.map(w => ({ id:w.id, name:w.name, ownerId:w.owner_id, settings:w.settings })),
-    members: members.map(m => ({ workspaceId:m.workspace_id, userId:m.user_id, role:m.role })),
-    projects: projects.map(p => ({ id:p.id, workspaceId:p.workspace_id, type:p.project_type, title:p.title, subtitle:p.subtitle, description:p.description, state:p.status, startDate:p.start_date, endDate:p.end_date, progress:p.progress, cover:coverFor(p), collaborators:['A'], budget:Number(p.budget), spent:Number(p.spent), currency:p.currency, settings:p.settings })),
-    records: records.map(r => ({ id:r.id, projectId:r.project_id, type:r.record_type, title:r.title, subtitle:r.subtitle, start:r.start_at, end:r.end_at, status:r.status, cost:Number(r.cost), currency:r.currency, shared:r.is_shared, location:r.location, data:r.data, createdBy:r.created_by })),
-    views: views.map(v => ({ id:v.id, projectId:v.project_id, ownerId:v.owner_id, name:v.name, type:v.view_type, visibility:v.visibility, settings:v.settings })),
-    canvasDesigns: designs.map(d => ({ id:d.id, viewId:d.view_id, ownerId:d.owner_id, name:views.find(v=>v.id===d.view_id)?.name || 'Canvas design', width:d.width, height:d.height, scene:d.scene, version:d.version, updatedAt:d.updated_at })),
-    templates: templates.map(t => ({ id:t.id, name:t.name, category:t.category, style:t.style, personal:t.visibility==='personal', shared:t.visibility==='workspace', scene:t.scene, metadata:t.metadata })),
-    assets: assets.map(a => ({ id:a.id, name:a.name, type:a.asset_type, collection:a.collection, storagePath:a.storage_path, src:a.signedUrl || '', metadata:a.metadata })),
-    auth: { ready:true, signedIn:true }
-  };
-}
-
-async function signedAssetUrls(assets) {
-  return Promise.all(assets.map(async asset => {
-    const { data } = await supabase.storage.from('workspace-assets').createSignedUrl(asset.storage_path, 3600);
-    return { ...asset, signedUrl:data?.signedUrl || '' };
-  }));
-}
-
-export async function initializeStore() {
-  const { data:{ session } } = await supabase.auth.getSession();
-  if (!session?.user) {
-    cache = { ...clone(starterState), auth:{ ready:true, signedIn:false } };
-    return cache;
-  }
-  const user = session.user;
-  await supabase.rpc('seed_starter_workspace');
-  const [profileRes, workspacesRes, membersRes, projectsRes, recordsRes, viewsRes, designsRes, templatesRes, assetsRes] = await Promise.all([
-    supabase.from('profiles').select('*').eq('id',user.id).maybeSingle(),
-    supabase.from('workspaces').select('*').order('created_at'),
-    supabase.from('workspace_members').select('*'),
-    supabase.from('projects').select('*').order('start_date',{ascending:true}),
-    supabase.from('records').select('*').order('start_at',{ascending:true,nullsFirst:false}),
-    supabase.from('views').select('*').order('created_at'),
-    supabase.from('canvas_designs').select('*').order('updated_at',{ascending:false}),
-    supabase.from('templates').select('*').order('created_at'),
-    supabase.from('assets').select('*').order('created_at',{ascending:false})
-  ]);
-  const error = [profileRes,workspacesRes,membersRes,projectsRes,recordsRes,viewsRes,designsRes,templatesRes,assetsRes].find(r=>r.error)?.error;
-  if (error) throw error;
-  const assets = await signedAssetUrls(assetsRes.data || []);
-  cache = mapCloud({ user, profile:profileRes.data, workspaces:workspacesRes.data||[], members:membersRes.data||[], projects:projectsRes.data||[], records:recordsRes.data||[], views:viewsRes.data||[], designs:designsRes.data||[], templates:templatesRes.data||[], assets });
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(cache));
-  return cache;
-}
-
-export function loadState(){ return cache; }
-export function saveState(state){ cache=state; localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
-export function updateState(mutator){ const state=clone(cache); mutator(state); saveState(state); return state; }
-export function resetState(){ localStorage.removeItem(STORAGE_KEY); cache=clone(starterState); return cache; }
-
-export async function saveCanvasDesign(designId, scene) {
-  const design = cache.canvasDesigns.find(d => d.id === designId);
-  if (!design) throw new Error('No canvas design is available for this view.');
-  const { error } = await supabase.from('canvas_designs').update({ scene, version:(design.version||1)+1 }).eq('id',designId);
-  if (error) throw error;
-  design.scene=scene; design.version=(design.version||1)+1; design.updatedAt=new Date().toISOString(); saveState(cache);
-  return design;
-}
-
-export async function uploadAsset(file, { workspaceId=null, collection='Uploads' }={}) {
-  if (!['image/png','image/jpeg','image/webp'].includes(file.type)) throw new Error('Choose a PNG, JPG, or WebP image.');
-  if (file.size > 10*1024*1024) throw new Error('Choose an image smaller than 10 MB.');
-  const { data:{ user } } = await supabase.auth.getUser();
-  if (!user) throw new Error('Sign in before uploading assets.');
-  const ext=(file.name.split('.').pop()||'png').replace(/[^a-z0-9]/gi,'').toLowerCase();
-  const path=`${user.id}/${crypto.randomUUID()}.${ext}`;
-  const uploaded=await supabase.storage.from('workspace-assets').upload(path,file,{contentType:file.type,upsert:false});
-  if(uploaded.error)throw uploaded.error;
-  const inserted=await supabase.from('assets').insert({ owner_id:user.id, workspace_id:workspaceId, name:file.name, asset_type:'image', storage_path:path, collection, metadata:{size:file.size,mime:file.type} }).select().single();
-  if(inserted.error)throw inserted.error;
-  const signed=await supabase.storage.from('workspace-assets').createSignedUrl(path,3600);
-  const asset={id:inserted.data.id,name:file.name,type:'image',collection,storagePath:path,src:signed.data?.signedUrl||'',metadata:inserted.data.metadata};
-  cache.assets.unshift(asset);saveState(cache);return asset;
-}
-
-export async function signIn(email,password){ const {error}=await supabase.auth.signInWithPassword({email,password}); if(error)throw error; return initializeStore(); }
-export async function signUp(name,email,password){ const {error}=await supabase.auth.signUp({email,password,options:{data:{display_name:name}}}); if(error)throw error; return true; }
-export async function signOut(){ await supabase.auth.signOut(); resetState(); }
+const STORAGE_KEY='wayfarer-workspace-v3';
+const clone=v=>JSON.parse(JSON.stringify(v));
+export const starterState={currentUser:{id:'guest',name:'Traveler',initials:'T'},workspaces:[],projects:[],records:[],templates:[],assets:[],canvasDesigns:[],views:[],members:[],profiles:[],invites:[],auth:{ready:false,signedIn:false}};
+let cache=clone(starterState);
+const initials=n=>String(n||'Traveler').split(/\s+/).map(x=>x[0]).join('').slice(0,2).toUpperCase();
+const coverFor=p=>p.cover?.gradient||'linear-gradient(135deg,#9CCFE8,#FFF7ED 62%,#F4B183)';
+function mapCloud({user,profile,workspaces,members,projects,records,views,designs,templates,assets,profiles,invites}){return{currentUser:{id:user.id,name:profile?.display_name||user.email?.split('@')[0]||'Traveler',initials:initials(profile?.display_name||user.email),email:user.email,preferences:profile?.preferences||{}},workspaces:workspaces.map(w=>({id:w.id,name:w.name,ownerId:w.owner_id,settings:w.settings||{}})),members:members.map(m=>({workspaceId:m.workspace_id,userId:m.user_id,role:m.role,joinedAt:m.joined_at})),profiles:(profiles||[]).map(p=>({id:p.id,name:p.display_name,avatarUrl:p.avatar_url})),projects:projects.map(p=>({id:p.id,workspaceId:p.workspace_id,type:p.project_type,title:p.title,subtitle:p.subtitle,description:p.description,state:p.status,startDate:p.start_date,endDate:p.end_date,progress:p.progress,cover:coverFor(p),budget:Number(p.budget),spent:Number(p.spent),currency:p.currency,settings:p.settings||{},updatedAt:p.updated_at})),records:records.map(r=>({id:r.id,projectId:r.project_id,type:r.record_type,title:r.title,subtitle:r.subtitle,start:r.start_at,end:r.end_at,status:r.status,cost:Number(r.cost),currency:r.currency,shared:r.is_shared,location:r.location||{},data:r.data||{},createdBy:r.created_by,updatedAt:r.updated_at})),views:views.map(v=>({id:v.id,projectId:v.project_id,ownerId:v.owner_id,name:v.name,type:v.view_type,visibility:v.visibility,settings:v.settings||{}})),canvasDesigns:designs.map(d=>({id:d.id,viewId:d.view_id,ownerId:d.owner_id,name:views.find(v=>v.id===d.view_id)?.name||'Canvas design',width:d.width,height:d.height,scene:d.scene,version:d.version,updatedAt:d.updated_at})),templates:templates.map(t=>({id:t.id,name:t.name,category:t.category,style:t.style,personal:t.visibility==='personal',shared:t.visibility==='workspace',scene:t.scene,metadata:t.metadata||{},ownerId:t.owner_id,workspaceId:t.workspace_id})),assets:assets.map(a=>({id:a.id,name:a.name,type:a.asset_type,collection:a.collection,storagePath:a.storage_path,src:a.signedUrl||'',metadata:a.metadata||{},workspaceId:a.workspace_id})),invites:(invites||[]).map(i=>({id:i.id,workspaceId:i.workspace_id,email:i.email,role:i.role,token:i.token,expiresAt:i.expires_at,acceptedAt:i.accepted_at})),auth:{ready:true,signedIn:true}}}
+async function signedAssetUrls(items){return Promise.all(items.map(async a=>{const {data}=await supabase.storage.from('workspace-assets').createSignedUrl(a.storage_path,3600);return{...a,signedUrl:data?.signedUrl||''}}))}
+export async function initializeStore(){const {data:{session}}=await supabase.auth.getSession();if(!session?.user){cache={...clone(starterState),auth:{ready:true,signedIn:false}};return cache}const user=session.user;await supabase.rpc('seed_starter_workspace');const q=await Promise.all([supabase.from('profiles').select('*').eq('id',user.id).maybeSingle(),supabase.from('workspaces').select('*').order('created_at'),supabase.from('workspace_members').select('*'),supabase.from('projects').select('*').order('start_date',{ascending:true}),supabase.from('records').select('*').order('start_at',{ascending:true,nullsFirst:false}),supabase.from('views').select('*').order('created_at'),supabase.from('canvas_designs').select('*').order('updated_at',{ascending:false}),supabase.from('templates').select('*').order('created_at'),supabase.from('assets').select('*').order('created_at',{ascending:false}),supabase.from('profiles').select('*'),supabase.from('project_invites').select('*').order('created_at',{ascending:false})]);const error=q.find(r=>r.error)?.error;if(error)throw error;const assets=await signedAssetUrls(q[8].data||[]);cache=mapCloud({user,profile:q[0].data,workspaces:q[1].data||[],members:q[2].data||[],projects:q[3].data||[],records:q[4].data||[],views:q[5].data||[],designs:q[6].data||[],templates:q[7].data||[],assets,profiles:q[9].data||[],invites:q[10].data||[]});localStorage.setItem(STORAGE_KEY,JSON.stringify(cache));return cache}
+export const loadState=()=>cache;export function saveState(s){cache=s;localStorage.setItem(STORAGE_KEY,JSON.stringify(s))}export function resetState(){localStorage.removeItem(STORAGE_KEY);cache=clone(starterState);return cache}
+const refresh=async()=>initializeStore();
+export async function createProject(v){const u=cache.currentUser;const wid=v.workspaceId||cache.workspaces[0]?.id;const {data,error}=await supabase.from('projects').insert({workspace_id:wid,project_type:v.type||'travel',title:v.title,subtitle:v.subtitle||'',description:v.description||'',status:v.state||'planning',start_date:v.startDate||null,end_date:v.endDate||null,budget:Number(v.budget)||0,currency:v.currency||'USD',cover:{gradient:v.cover||'linear-gradient(135deg,#9CCFE8,#FFF7ED 62%,#F4B183)'},created_by:u.id}).select().single();if(error)throw error;const {data:view,error:ve}=await supabase.from('views').insert({project_id:data.id,owner_id:u.id,name:`My ${data.title} View`,view_type:'canvas',visibility:'personal'}).select().single();if(ve)throw ve;await supabase.from('canvas_designs').insert({view_id:view.id,owner_id:u.id,width:1200,height:800});await refresh();return data}
+export async function updateProject(id,v){const payload={};for(const [k,col] of Object.entries({title:'title',subtitle:'subtitle',description:'description',state:'status',startDate:'start_date',endDate:'end_date',progress:'progress',budget:'budget',spent:'spent',currency:'currency',settings:'settings'}))if(v[k]!==undefined)payload[col]=v[k];const {error}=await supabase.from('projects').update(payload).eq('id',id);if(error)throw error;return refresh()}
+export async function deleteProject(id){const {error}=await supabase.from('projects').delete().eq('id',id);if(error)throw error;return refresh()}
+export async function createRecord(v){const {data,error}=await supabase.from('records').insert({project_id:v.projectId,record_type:v.type||'note',title:v.title,subtitle:v.subtitle||'',status:v.status||'open',start_at:v.start||null,end_at:v.end||null,cost:Number(v.cost)||0,currency:v.currency||'USD',is_shared:v.shared!==false,location:v.location||{},data:v.data||{},created_by:cache.currentUser.id}).select().single();if(error)throw error;await refresh();return data}
+export async function updateRecord(id,v){const payload={};for(const [k,col] of Object.entries({type:'record_type',title:'title',subtitle:'subtitle',status:'status',start:'start_at',end:'end_at',cost:'cost',currency:'currency',shared:'is_shared',location:'location',data:'data'}))if(v[k]!==undefined)payload[col]=v[k];const {error}=await supabase.from('records').update(payload).eq('id',id);if(error)throw error;return refresh()}
+export async function deleteRecord(id){const {error}=await supabase.from('records').delete().eq('id',id);if(error)throw error;return refresh()}
+export async function saveCanvasDesign(id,scene){const d=cache.canvasDesigns.find(x=>x.id===id);if(!d)throw new Error('No canvas design is available.');const {error}=await supabase.from('canvas_designs').update({scene,version:(d.version||1)+1}).eq('id',id);if(error)throw error;d.scene=scene;d.version++;saveState(cache);return d}
+export async function createView(projectId,name,visibility='personal'){const {data:v,error}=await supabase.from('views').insert({project_id:projectId,owner_id:cache.currentUser.id,name,view_type:'canvas',visibility}).select().single();if(error)throw error;const {error:de}=await supabase.from('canvas_designs').insert({view_id:v.id,owner_id:cache.currentUser.id,width:1200,height:800});if(de)throw de;await refresh();return v}
+export async function saveTemplate(v){const {error}=await supabase.from('templates').insert({owner_id:cache.currentUser.id,workspace_id:v.shared?cache.workspaces[0]?.id:null,name:v.name,category:v.category||'General',style:v.style||'minimal',visibility:v.shared?'workspace':'personal',scene:v.scene||null,metadata:v.metadata||{}});if(error)throw error;return refresh()}
+export async function deleteTemplate(id){const {error}=await supabase.from('templates').delete().eq('id',id);if(error)throw error;return refresh()}
+export async function uploadAsset(file,{workspaceId=null,collection='Uploads'}={}){if(!['image/png','image/jpeg','image/webp'].includes(file.type))throw new Error('Choose PNG, JPG, or WebP.');if(file.size>10*1024*1024)throw new Error('Choose an image under 10 MB.');const ext=(file.name.split('.').pop()||'png').replace(/[^a-z0-9]/gi,'');const path=`${cache.currentUser.id}/${crypto.randomUUID()}.${ext}`;const up=await supabase.storage.from('workspace-assets').upload(path,file,{contentType:file.type});if(up.error)throw up.error;const ins=await supabase.from('assets').insert({owner_id:cache.currentUser.id,workspace_id:workspaceId,name:file.name,asset_type:'image',storage_path:path,collection,metadata:{size:file.size,mime:file.type}}).select().single();if(ins.error)throw ins.error;await refresh();return cache.assets.find(a=>a.id===ins.data.id)}
+export async function deleteAsset(id){const a=cache.assets.find(x=>x.id===id);if(!a)return;await supabase.storage.from('workspace-assets').remove([a.storagePath]);const {error}=await supabase.from('assets').delete().eq('id',id);if(error)throw error;return refresh()}
+export async function createInvite(email,role='viewer'){const {data,error}=await supabase.from('project_invites').insert({workspace_id:cache.workspaces[0].id,email,role,created_by:cache.currentUser.id}).select().single();if(error)throw error;await refresh();return data}
+export async function acceptInvite(token){const {data,error}=await supabase.rpc('accept_workspace_invite',{invite_token:token});if(error)throw error;return data}
+export async function updateProfile(v){const {error}=await supabase.from('profiles').update({display_name:v.name,preferences:v.preferences||{}}).eq('id',cache.currentUser.id);if(error)throw error;return refresh()}
+export async function updateWorkspace(id,v){const {error}=await supabase.from('workspaces').update({name:v.name,settings:v.settings||{}}).eq('id',id);if(error)throw error;return refresh()}
+export async function signIn(email,password){const {error}=await supabase.auth.signInWithPassword({email,password});if(error)throw error;return initializeStore()}export async function signUp(name,email,password){const {error}=await supabase.auth.signUp({email,password,options:{data:{display_name:name}}});if(error)throw error;return true}export async function signOut(){await supabase.auth.signOut();resetState()}
