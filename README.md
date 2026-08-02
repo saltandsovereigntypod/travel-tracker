@@ -1,28 +1,67 @@
 # Wayfarer Workspace
 
-A polished starter for a visual life workspace where travel planning is the first application, not the architectural limit.
+A visual life workspace where structured records and personal design remain separate. Travel planning is the first application, but the data model supports reusable workspaces, projects, records, templates, views, canvas designs, assets, and collaboration roles.
 
-## What is included
+## Supabase setup
 
-- Marketing landing page
-- Personal dashboard with project cards and upcoming events
-- Full trip overview with lifecycle, records, budget, readiness, and collaborators
-- Fabric.js visual editor with text, shapes, checklists, data cards, images, layering, alignment, duplication, locking, deletion, undo/redo, zoom, and local saving
-- Templates and reusable asset library pages
-- Responsive phone, tablet, and desktop layouts
-- Local placeholder data and localStorage persistence
-- Supabase-ready domain boundaries
-- Basic Node structure tests
+1. Open the Supabase project at `https://galveymskdfnxiqcloxf.supabase.co`.
+2. In **SQL Editor**, create a new query.
+3. Paste the complete contents of [`supabase/setup.sql`](supabase/setup.sql) and run it once.
+4. In **Authentication > URL Configuration**, set the Site URL to your GitHub Pages URL and add the same URL to Redirect URLs. During local development, also add `http://localhost:8000`.
+5. In **Authentication > Providers > Email**, choose whether email confirmation should be required. The UI supports either mode.
+6. Deploy the repository with GitHub Pages.
 
-## Run locally
+The browser uses the Supabase project URL and publishable key in `assets/js/services/supabase-client.js`. A publishable key is safe to expose in browser code when Row Level Security is enabled. Never add a `service_role` key to this repository.
 
-Because the app uses ES modules, serve it over HTTP rather than opening the files directly.
+## What the SQL creates
+
+- Profiles connected to Supabase Auth
+- Workspaces and owner/editor/viewer membership
+- Generic projects and flexible JSON-backed records
+- Personal or workspace-visible views
+- Owner-scoped Fabric.js canvas designs
+- Reusable templates
+- Private asset metadata and a private `workspace-assets` Storage bucket
+- Project invitations
+- Row Level Security policies for every exposed table
+- A first-login seed function that creates a starter workspace and Japan 2027 project
+
+## Local development
 
 ```bash
-npx serve .
+python3 -m http.server 8000
 ```
 
-Then open the URL printed by `serve`.
+Open `http://localhost:8000`. ES modules and Supabase Auth will not work correctly when opening the HTML files directly from Finder.
+
+## Architecture
+
+```text
+Users
+  -> Workspaces
+    -> Workspace members
+    -> Projects
+      -> Records (shared information)
+      -> Views (personal or shared presentation)
+        -> Canvas designs (Fabric.js JSON)
+    -> Templates
+    -> Assets
+```
+
+The database owns information. Canvas scenes own presentation. Changing a hotel address updates the shared record. Moving that hotel card or changing its typography updates only the selected view's design.
+
+## Current implemented cloud features
+
+- Email/password sign-up and sign-in
+- Session persistence
+- Automatic starter workspace creation
+- Cloud loading for workspaces, projects, records, views, designs, templates, and assets
+- Fabric canvas design saving
+- PNG, JPG, and WebP uploads to private Supabase Storage
+- Signed asset URLs
+- Sign out
+
+Project and record creation forms, invitation acceptance, realtime collaboration, and conflict resolution are the next application layer. The schema and policies are already structured for those features.
 
 ## Tests
 
@@ -30,40 +69,19 @@ Then open the URL printed by `serve`.
 npm test
 ```
 
-No install is required for the current tests because they use Node's built-in test runner.
+## Complete product migration
 
-## GitHub Pages
+This build includes the finished CRUD and collaboration foundation for projects, trip records, lifecycle states, budgets, packing lists, notes, memories, assets, personal canvas views, settings, invitations, and Supabase persistence.
 
-This is a static site. In repository Settings, open Pages, choose **Deploy from a branch**, select `main` and `/ (root)`, then save.
-
-## Architecture
-
-The local starter state is organized as:
+For an existing Supabase database that already ran `supabase/setup.sql`, run only:
 
 ```text
-Users
-  -> Workspaces
-    -> Projects
-      -> Records
-      -> Views
-        -> Canvas Designs
-    -> Templates
-    -> Assets
+supabase/002_complete_product.sql
 ```
 
-Records are canonical data. Templates and canvas scenes define appearance. Personal canvas designs include an `ownerId`, so collaborators can share records while maintaining different visual views.
+For a brand-new Supabase project, run these in order:
 
-See `docs/ARCHITECTURE.md` for the recommended Supabase migration boundaries.
+1. `supabase/setup.sql`
+2. `supabase/002_complete_product.sql`
 
-## Important editor note
-
-Fabric.js is loaded from jsDelivr on `editor.html`. For a production build, pin and self-host the library or add a bundler. The editor displays a clear connection error if the CDN is unavailable.
-
-## Next development phases
-
-1. Add repository adapters and Supabase authentication.
-2. Add row-level security for workspace membership and record visibility.
-3. Bind canvas objects to live project records.
-4. Add project and record creation forms.
-5. Add cloud asset uploads and collaborative presence.
-6. Add map and calendar adapters behind reusable view interfaces.
+Deploy every file in this repository to the root of the GitHub repository. Do not place the extracted outer folder inside the repository. `index.html`, `dashboard.html`, `trip.html`, and the `assets` directory must sit at repository root.
