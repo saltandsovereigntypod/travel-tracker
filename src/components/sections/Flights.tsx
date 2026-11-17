@@ -14,10 +14,10 @@ import { CostEditor, costColumns, costValueFrom, type CostValue } from "../ui/Co
 import { PaymentPanel, PayStatus } from "./Payments";
 import { participantsForFlight, useMoney } from "./money";
 import { AirportInput } from "../travel/AirportInput";
-import { CardOptions, useCardParts } from "../ui/CardOptions";
+import { CardOptions, useCardChoice, useCardParts } from "../ui/CardOptions";
 import { leg, useTravel } from "../travel/useTravel";
 import { addDays, formatDay, formatMoney, formatTime, splitLocal } from "@/lib/format";
-import { flightOptionKey, stayForDay } from "@/lib/travel";
+import { flightOptionKey, groupFlights, stayForDay } from "@/lib/travel";
 import { formatDistance, hasCoords } from "@/lib/geo";
 import type { BookingStatus, Flight } from "@/lib/types";
 
@@ -51,8 +51,14 @@ export function FlightsSection({ compact = false }: { compact?: boolean }) {
   const flights = [...rows.flights].sort((a, b) => (a.depart_local ?? "9999").localeCompare(b.depart_local ?? "9999"));
   const settled = flights.filter((f) => f.status !== "idea");
   const travel = useTravel();
-  const deciding = travel.flightGroups.filter((g) => g.options.length > 0);
-  const shown = compact ? flights.filter((f) => f.status !== "cancelled").slice(0, 3) : settled;
+  const show = useCardParts("flights");
+  const group = useCardChoice("flights")("group");
+  const { nameOf } = useTrip();
+  const deciding = show("options") ? travel.flightGroups.filter((g) => g.options.length > 0) : [];
+  // On My view: the next few flights (grouped ones show them all so each group is complete).
+  const live = flights.filter((f) => f.status !== "cancelled" && (show("options") || f.status !== "idea"));
+  const shown = compact ? (group === "none" ? live.slice(0, 3) : live) : settled;
+  const groups = groupFlights(shown, group, nameOf);
 
   return (
     <div>
@@ -94,10 +100,15 @@ export function FlightsSection({ compact = false }: { compact?: boolean }) {
               ))}
             </div>
           )}
-          {shown.map((f) => <BoardingPass key={f.id} flight={f} compact={compact} onOpen={() => setOpen({ flight: f, edit: false })} />)}
+          {groups.map((g) => (
+            <div key={g.key} className="card-group stack">
+              {g.title && <h3 className="card-group-title">{g.title} <span className="tiny muted">{g.flights.length}</span></h3>}
+              {g.flights.map((f) => <BoardingPass key={`${g.key}${f.id}`} flight={f} compact={compact} onOpen={() => setOpen({ flight: f, edit: false })} />)}
+            </div>
+          ))}
         </div>
       )}
-      {compact && flights.length > shown.length && (
+      {compact && live.length > shown.length && (
         <Link className="btn btn-sm btn-ghost" style={{ marginTop: 8 }} href={`/trips/${tripId}/flights`}>All flights →</Link>
       )}
       <FlightPanel open={open} onClose={() => setOpen(null)} onEdit={(f) => setOpen({ flight: f, edit: true })} onView={(f) => setOpen({ flight: f, edit: false })} />
@@ -190,7 +201,7 @@ function BoardingPass({ flight: f, compact, onOpen }: { flight: Flight; compact?
             <div className="tiny muted">{formatDay(arr.day)}</div>
           </div>
         </div>
-        {!compact && show("travelers") && f.travelers.length > 0 && (
+        {show("travelers") && f.travelers.length > 0 && (
           <div className="row">
             <div className="avatar-stack">
               {f.travelers.map((id) => <Avatar key={id} name={nameOf(id)} color={colorOf(id)} size={24} />)}

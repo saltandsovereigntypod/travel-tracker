@@ -271,3 +271,55 @@ export function staySearchLinks(a: SearchArea): { label: string; href: string }[
     { label: "Google Hotels", href: `https://www.google.com/maps/search/hotels/@${f(a.center.lat)},${f(a.center.lng)},${zoom}z` },
   ];
 }
+
+// ---- Grouping flights --------------------------------------------------------------
+
+export type FlightLeg = "out" | "return" | "during";
+
+/**
+ * Outbound, return or in between, worked out per person: each person's first flight
+ * is their flight out, their last is their flight home, anything else is during the trip.
+ * Flights with nobody on them use the whole group's order.
+ */
+export function flightLegs(flights: Pick<Flight, "id" | "status" | "depart_local" | "travelers">[]): Record<string, FlightLeg> {
+  const live = flights.filter((f) => f.status !== "cancelled").sort((a, b) => (a.depart_local ?? "9999").localeCompare(b.depart_local ?? "9999"));
+  const legFor = (seq: { id: string }[], id: string): FlightLeg => {
+    const i = seq.findIndex((f) => f.id === id);
+    if (i === 0) return "out";
+    if (i === seq.length - 1 && seq.length > 1) return "return";
+    return "during";
+  };
+  const out: Record<string, FlightLeg> = {};
+  for (const f of flights) {
+    const who = f.travelers?.[0];
+    const seq = who ? live.filter((x) => x.travelers?.includes(who)) : live;
+    out[f.id] = f.status === "cancelled" ? "during" : legFor(seq, f.id);
+  }
+  return out;
+}
+
+export interface FlightGroup<F> {
+  key: string;
+  title: string;
+  flights: F[];
+}
+
+export function groupFlights<F extends Pick<Flight, "id" | "status" | "depart_local" | "travelers">>(
+  flights: F[],
+  by: string,
+  nameOf: (id: string) => string,
+): FlightGroup<F>[] {
+  if (by === "direction") {
+    const legs = flightLegs(flights);
+    const order: [FlightLeg, string][] = [["out", "Flights out"], ["during", "During the trip"], ["return", "Flights home"]];
+    return order.map(([k, title]) => ({ key: k, title, flights: flights.filter((f) => legs[f.id] === k) })).filter((g) => g.flights.length);
+  }
+  if (by === "person") {
+    const people = [...new Set(flights.flatMap((f) => f.travelers))];
+    const groups = people.map((p) => ({ key: p, title: nameOf(p), flights: flights.filter((f) => f.travelers.includes(p)) }));
+    const nobody = flights.filter((f) => !f.travelers.length);
+    if (nobody.length) groups.push({ key: "~", title: "Nobody added yet", flights: nobody });
+    return groups.sort((a, b) => (a.key === "~" ? 1 : b.key === "~" ? -1 : a.title.localeCompare(b.title)));
+  }
+  return [{ key: "all", title: "", flights }];
+}

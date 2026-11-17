@@ -295,7 +295,7 @@ export interface TripView {
   /** Per-list view choices, private to this person. Keyed by list id. */
   list_prefs?: Record<string, ListPrefs>;
   /** What shows on each kind of card, private to this person: { ideas: { link: false } }. */
-  card_prefs?: Record<string, Record<string, boolean>>;
+  card_prefs?: Record<string, Record<string, boolean | string>>;
   /** This person's scrapbook design (see lib/scrapbook.ts). */
   scrapbook?: import("./scrapbook").ScrapbookPrefs;
   updated_at: string;

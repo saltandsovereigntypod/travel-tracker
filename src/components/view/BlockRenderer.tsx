@@ -20,6 +20,8 @@ import { blockMeta } from "@/lib/blocks";
 import { fontCss, readableOn } from "@/lib/themes";
 import { formatRange, hostname } from "@/lib/format";
 import type { BlockProps, BlockStyle, BlockType } from "@/lib/types";
+import { CardBlockScope, CardOptions } from "../ui/CardOptions";
+import type { CardKind } from "@/lib/card-parts";
 
 export interface RenderableBlock {
   id: string;
@@ -29,6 +31,9 @@ export interface RenderableBlock {
 }
 
 const DECOR: BlockType[] = ["heading", "text", "quote", "image", "sticker", "divider"];
+
+/** Blocks whose cards can be customized right on My view. */
+const BLOCK_CARDS: Partial<Record<BlockType, CardKind>> = { ideas: "ideas", itinerary: "plans", flights: "flights", stays: "stays", budget: "budget", photos: "photos" };
 
 /** Turns a block's style overrides into CSS variables scoped to that block. */
 export function blockVars(style: BlockStyle | undefined): React.CSSProperties {
@@ -70,6 +75,7 @@ export function BlockRenderer({
   const bare = cardStyle === "none";
   const title = style.title ?? (meta.section && meta.section !== "people" ? moduleName(meta.section, meta.label) : meta.label);
   const showTitle = !style.hideTitle && !isDecor && block.type !== "hero" && block.type !== "countdown";
+  const cardKind = BLOCK_CARDS[block.type];
 
   return (
     <div
@@ -87,10 +93,19 @@ export function BlockRenderer({
       {showTitle && (
         <div className="block-title">
           <h3>{title}</h3>
-          {meta.section && <Link href={`/trips/${tripId}/${meta.section}`}>Open →</Link>}
+          <div className="row" style={{ gap: 4 }}>
+            {cardKind && (
+              <CardBlockScope value={block.id}>
+                <CardOptions kind={cardKind} iconOnly title={`${title} on My view`} />
+              </CardBlockScope>
+            )}
+            {meta.section && <Link href={`/trips/${tripId}/${meta.section}`}>Open →</Link>}
+          </div>
         </div>
       )}
-      <BlockBody block={block} editing={editing && selected} onProps={onProps} fill={fill} />
+      <CardBlockScope value={block.id}>
+        <BlockBody block={block} editing={editing && selected} onProps={onProps} fill={fill} />
+      </CardBlockScope>
     </div>
   );
 }

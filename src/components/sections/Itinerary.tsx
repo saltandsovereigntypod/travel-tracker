@@ -32,7 +32,7 @@ import { itemsForDay, orderForTime } from "./itinerary-order";
 import { calendarEntries } from "@/lib/fields";
 import { pageTasks } from "@/lib/pages";
 import { useTravel } from "../travel/useTravel";
-import { CardOptions, useCardParts } from "../ui/CardOptions";
+import { CardOptions, useCardChoice, useCardParts } from "../ui/CardOptions";
 
 interface FixedEvent {
   key: string;
@@ -99,6 +99,8 @@ export function useFixedEvents() {
 
 export function ItinerarySection({ compact = false }: { compact?: boolean }) {
   const { rows, trip, canEdit, update, tripId } = useTrip();
+  const planChoice = useCardChoice("plans");
+  const showPlanPart = useCardParts("plans");
   const fixed = useFixedEvents();
   const [layout, setLayout] = useState<"list" | "board">("list");
   const [editing, setEditing] = useState<ItineraryItem | { day: string | null } | null>(null);
@@ -126,7 +128,9 @@ export function ItinerarySection({ compact = false }: { compact?: boolean }) {
     ? (() => {
         const withStuff = allDays.filter((d) => itemsForDay(rows.itinerary_items, d).length || fixed[d]?.length);
         const fromToday = withStuff.filter((d) => d >= today);
-        return (fromToday.length ? fromToday : withStuff).slice(0, 3);
+        const pool = fromToday.length ? fromToday : withStuff;
+        const n = planChoice("days");
+        return n === "all" ? pool : pool.slice(0, Number(n) || 3);
       })()
     : allDays;
 
@@ -244,7 +248,7 @@ export function ItinerarySection({ compact = false }: { compact?: boolean }) {
                 day={d}
                 index={days.indexOf(d)}
                 items={itemsForDay(rows.itinerary_items, d)}
-                fixed={fixed[d] ?? []}
+                fixed={showPlanPart("fixed") ? fixed[d] ?? [] : []}
                 isToday={d === today}
                 compact={compact}
                 onOpen={setEditing}

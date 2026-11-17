@@ -14,7 +14,7 @@ import { CostEditor, costColumns, costValueFrom, type CostValue } from "../ui/Co
 import { PaymentPanel, PayStatus } from "./Payments";
 import { participantsForStay, stayNights, useMoney } from "./money";
 import { useTravel } from "../travel/useTravel";
-import { CardOptions, useCardParts } from "../ui/CardOptions";
+import { CardOptions, useCardChoice, useCardParts } from "../ui/CardOptions";
 import { STAY_KINDS, stayKindOf } from "@/lib/categories";
 import { daysBetween, formatDay, formatMoney, formatRange, formatTime, normalizeUrl, hostname } from "@/lib/format";
 import { distanceKm, formatDistance } from "@/lib/geo";
@@ -30,8 +30,17 @@ export function StaysSection({ compact = false }: { compact?: boolean }) {
   const travel = useTravel();
   const stays = [...rows.stays].sort((a, b) => (a.check_in ?? "9999").localeCompare(b.check_in ?? "9999"));
   const settled = stays.filter((s) => s.status !== "idea");
-  const deciding = travel.stayGroups.filter((g) => g.options.length > 0);
-  const shown = compact ? stays.filter((s) => s.status !== "cancelled").slice(0, 3) : settled;
+  const showPart = useCardParts("stays");
+  const group = useCardChoice("stays")("group");
+  const deciding = showPart("options") ? travel.stayGroups.filter((g) => g.options.length > 0) : [];
+  const live = stays.filter((s) => s.status !== "cancelled" && (showPart("options") || s.status !== "idea"));
+  const shown = compact ? (group === "none" ? live.slice(0, 3) : live) : settled;
+  const groups: { key: string; title: string; stays: Stay[] }[] =
+    group === "status"
+      ? ([["booked", "Booked"], ["idea", "Still deciding"], ["cancelled", "Not chosen"]] as const)
+          .map(([k, title]) => ({ key: k, title, stays: shown.filter((s) => s.status === k) }))
+          .filter((g) => g.stays.length)
+      : [{ key: "all", title: "", stays: shown }];
   const totalNights = stays.filter((s) => s.status === "booked" && s.check_in && s.check_out).reduce((n, s) => n + daysBetween(s.check_in!, s.check_out!), 0);
   const isTrip = (trip?.kind ?? "trip") === "trip";
 
@@ -78,11 +87,20 @@ export function StaysSection({ compact = false }: { compact?: boolean }) {
               );
             })}
           <div className={compact ? "stack" : "grid-cards"} style={compact ? undefined : { gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))" }}>
-            {shown.map((s) => <StayCard key={s.id} stay={s} compact={compact} onOpen={() => setOpen({ stay: s, edit: false })} />)}
+            {groups.length === 1 && !groups[0].title
+              ? shown.map((s) => <StayCard key={s.id} stay={s} compact={compact} onOpen={() => setOpen({ stay: s, edit: false })} />)
+              : groups.map((g) => (
+                  <div key={g.key} className="card-group stack" style={{ gridColumn: "1 / -1" }}>
+                    <h3 className="card-group-title">{g.title} <span className="tiny muted">{g.stays.length}</span></h3>
+                    <div className={compact ? "stack" : "grid-cards"} style={compact ? undefined : { gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))" }}>
+                      {g.stays.map((s) => <StayCard key={s.id} stay={s} compact={compact} onOpen={() => setOpen({ stay: s, edit: false })} />)}
+                    </div>
+                  </div>
+                ))}
           </div>
         </div>
       )}
-      {compact && stays.length > shown.length && (
+      {compact && live.length > shown.length && (
         <Link className="btn btn-sm btn-ghost" style={{ marginTop: 8 }} href={`/trips/${tripId}/stays`}>All stays →</Link>
       )}
       <StayPanel open={open} onClose={() => setOpen(null)} onEdit={(s) => setOpen({ stay: s, edit: true })} onView={(s) => setOpen({ stay: s, edit: false })} />
@@ -210,13 +228,13 @@ function StayCard({ stay: s, compact, onOpen }: { stay: Stay; compact?: boolean;
           {s.check_out_time && <div className="tiny muted">{formatTime(s.check_out_time)}</div>}
         </div>
       </div>}
-      {!compact && show("distance") && (fromAirport || fit?.avgKm != null) && (
+      {show("distance") && (fromAirport || fit?.avgKm != null) && (
         <div className="stack tiny muted" style={{ gap: 2, marginTop: "0.7rem" }}>
           {fromAirport && <span className="row" style={{ gap: 5 }}><Plane size={12} /> {fromAirport.label} from {fromAirport.airport.code}</span>}
           {fit?.avgKm != null && fit.plans > 0 && <span className="row" style={{ gap: 5 }}><MapPin size={12} /> {formatDistance(fit.avgKm)} from your plans on average</span>}
         </div>
       )}
-      {!compact && (
+      {(
         <div className="row wrap" style={{ marginTop: "0.9rem", gap: "0.4rem" }} onClick={(e) => e.stopPropagation()}>
           {show("confirmation") && s.confirmation && (
             <button className="chip chip-muted" style={{ cursor: "pointer", border: 0 }} onClick={() => { void navigator.clipboard?.writeText(s.confirmation); toast.success("Confirmation copied"); }}>
