@@ -898,3 +898,56 @@ input[type="checkbox"] { accent-color: var(--accent); width: 18px; height: 18px;
 @media (max-width: 720px) {
   .template-row-actions { width: 100%; justify-content: flex-end; }
 }
+
+/* Side panels: read first, edit when you choose to. */
+.backdrop-panel { place-items: stretch end; padding: 0; background: color-mix(in srgb, #0b0b14 28%, transparent); }
+.modal-panel {
+  max-width: min(560px, 100vw); height: 100dvh; max-height: 100dvh; border-radius: 0; border-width: 0 0 0 1px;
+  animation: slide-in 0.2s ease; outline: none;
+}
+.modal-panel .modal-head { position: sticky; top: 0; background: var(--surface); z-index: 2; border-bottom: 1px solid var(--line); padding-bottom: 0.8rem; }
+.modal-panel .modal-head h2 { font-size: 1.25rem; min-width: 0; overflow-wrap: anywhere; }
+.modal-panel .modal-body { flex: 1; padding-top: 1rem; }
+@keyframes slide-in { from { transform: translateX(40px); opacity: 0; } }
+@media (max-width: 720px) {
+  .backdrop-panel { place-items: end stretch; }
+  .modal-panel { max-width: 100%; height: 94dvh; max-height: 94dvh; border-radius: 22px 22px 0 0; border-width: 1px 0 0; animation: rise 0.22s ease; }
+  .modal-panel .modal-head { border-radius: 22px 22px 0 0; }
+  .modal-panel .modal-head::before { content: ""; position: absolute; top: 6px; left: 50%; width: 38px; height: 4px; margin-left: -19px; border-radius: 4px; background: var(--line); }
+}
+@keyframes rise { from { transform: translateY(60px); opacity: 0; } }
+
+/* Read view inside a panel */
+.detail { display: flex; flex-direction: column; gap: 1.1rem; }
+.detail-hero { display: flex; gap: 0.9rem; align-items: center; }
+.detail-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 0.8rem 1rem; }
+.detail-grid > div > small { display: block; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); font-weight: 700; margin-bottom: 2px; }
+.detail-section > h3 { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); margin-bottom: 0.45rem; font-family: var(--font-body); }
+.detail-notes { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.55; }
+.dist-row { display: flex; align-items: center; gap: 0.6rem; padding: 0.55rem 0.65rem; border-radius: 12px; background: var(--line); text-decoration: none; color: inherit; }
+.dist-row + .dist-row { margin-top: 0.35rem; }
+.dist-row .grow { min-width: 0; }
+a.dist-row:hover { background: var(--soft2); }
+
+/* Travel options */
+.link-btn { border: 0; background: none; padding: 0; color: var(--accent); font: inherit; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; }
+.options-card { border-style: dashed; }
+.options-kicker { text-transform: uppercase; letter-spacing: 0.08em; font-weight: 700; }
+.option-row { display: flex; align-items: center; gap: 0.7rem; padding: 0.6rem 0.75rem; border-radius: 12px; background: var(--line); cursor: pointer; }
+.option-row:hover { background: var(--soft2); }
+.option-row .chip { flex: none; }
+.airport-input { position: relative; }
+.airport-menu { position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 30; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow-lg); padding: 4px; max-height: 300px; overflow: auto; }
+.airport-menu button { display: flex; gap: 0.6rem; align-items: center; width: 100%; border: 0; background: none; text-align: left; padding: 0.5rem 0.6rem; border-radius: 8px; font: inherit; font-size: 0.9rem; color: var(--ink); cursor: pointer; }
+.airport-menu button strong { width: 2.6rem; flex: none; font-family: ui-monospace, Menlo, monospace; }
+.airport-menu button.active, .airport-menu button:hover { background: var(--soft); }
+.fit-card .spot { display: flex; gap: 0.8rem; align-items: flex-start; }
+.fit-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0.2rem 0.8rem; align-items: center; padding: 0.6rem 0.75rem; border-radius: 12px; background: var(--line); cursor: pointer; }
+.fit-row:hover { background: var(--soft2); }
+.fit-bar { grid-column: 1 / -1; height: 5px; border-radius: 4px; background: color-mix(in srgb, var(--ink) 8%, transparent); overflow: hidden; }
+.fit-bar span { display: block; height: 100%; background: var(--accent2); border-radius: 4px; }
+@media (max-width: 720px) {
+  .option-row { flex-wrap: wrap; }
+  .option-row > .grow { flex: 1 1 60%; }
+}
+.spot-period { padding: 0.7rem 0.8rem; border-radius: 12px; background: var(--line); }

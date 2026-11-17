@@ -150,6 +150,10 @@ export interface Flight extends CostFields {
   travelers: string[];
   cost: number | null;
   notes: string;
+  /** Considered flights: how rough the date is (± days). 0 = exact. */
+  date_flex?: number;
+  /** Options that compete ("Outbound"). Empty = grouped by route. */
+  option_group?: string;
   created_by: string | null;
   created_at: string;
   updated_at: string;
@@ -175,6 +179,8 @@ export interface Stay extends CostFields {
   guests: string[];
   cost: number | null;
   notes: string;
+  /** Options that compete ("Week 1"). Empty = grouped by dates. */
+  option_group?: string;
   created_by: string | null;
   created_at: string;
   updated_at: string;

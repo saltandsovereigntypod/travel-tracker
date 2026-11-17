@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Plus, Trash2, Wallet, ArrowRight, Check, Pencil, Loader2, Users, HeartHandshake } from "lucide-react";
 import clsx from "clsx";
 import { useTrip } from "../TripProvider";
+import { useTravel } from "../travel/useTravel";
 import { ModuleTitle } from "../ModuleTitle";
 import { Modal } from "../ui/Modal";
 import { Avatar, EmptyState, Field, PersonPicker, Segmented } from "../ui/Fields";
@@ -34,6 +35,7 @@ export interface ExpensePreset {
 export function BudgetSection({ compact = false }: { compact?: boolean }) {
   const { rows, canEdit, updateTrip, nameOf, colorOf, insert, me, tripId, partyOf, partyName, households } = useTrip();
   const money = useMoney();
+  const travel = useTravel();
   const { cur, spent, committedTotal, stillToPay, wishlist, budget, remainingBudget, received, expectedIncome, incomeThings } = money;
   const [editing, setEditing] = useState<Expense | "new" | null>(null);
   const [preset, setPreset] = useState<ExpensePreset | null>(null);
@@ -157,6 +159,16 @@ export function BudgetSection({ compact = false }: { compact?: boolean }) {
           <small>{!budget || remainingBudget >= 0 ? "Left in budget" : "Over budget"}</small>
           <strong style={{ color: remainingBudget < 0 ? "var(--danger)" : undefined }}>{budget ? formatMoney(Math.abs(remainingBudget), cur) : "—"}</strong>
         </div>
+        {travel.estimated > 0 && (
+          <div className="card stat">
+            <small>Not booked yet</small>
+            <strong>≈ {formatMoney(travel.estimated, cur)}</strong>
+            <span className="tiny muted">
+              cheapest flight &amp; stay options
+              {travel.remainingIfBooked != null && <> · {travel.remainingIfBooked >= 0 ? `${formatMoney(travel.remainingIfBooked, cur)} left after` : `${formatMoney(-travel.remainingIfBooked, cur)} over after`}</>}
+            </span>
+          </div>
+        )}
         <div className="card stat"><small>Wishlist (ideas)</small><strong>{formatMoney(wishlist, cur)}</strong><span className="tiny muted">if you did every idea</span></div>
         <div className="card stat"><small>Your share to pay</small><strong>{formatMoney(myShareLeft, cur)}</strong></div>
         {(received > 0 || expectedIncome > 0) && (

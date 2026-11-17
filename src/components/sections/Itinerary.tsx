@@ -30,6 +30,7 @@ export { itemsForDay, orderForTime } from "./itinerary-order";
 import { itemsForDay, orderForTime } from "./itinerary-order";
 import { calendarEntries } from "@/lib/fields";
 import { pageTasks } from "@/lib/pages";
+import { useTravel } from "../travel/useTravel";
 
 interface FixedEvent {
   key: string;
@@ -343,6 +344,7 @@ function ItemRow({ item, onOpen, draggable, overlay }: { item: ItineraryItem; on
   const drop = useDroppable({ id: `item:${item.id}`, disabled: overlay });
   const cat = categoryOf(item.category);
   const comments = useCommentCount("itinerary", item.id);
+  const fromStay = useTravel().fromStay(item);
   return (
     <div
       ref={(n) => {
@@ -367,6 +369,7 @@ function ItemRow({ item, onOpen, draggable, overlay }: { item: ItineraryItem; on
         <strong style={{ display: "block" }}>{item.title}</strong>
         <div className="row tiny muted wrap" style={{ gap: "0.5rem" }}>
           {item.location?.name && <span className="row" style={{ gap: 2 }}><MapPin size={11} />{item.location.name}</span>}
+          {fromStay && <span className="row" style={{ gap: 2 }} title={`From ${fromStay.stay.name}`}>🏨 {fromStay.label.split(" · ")[0]}</span>}
           {costed?.total != null && <span>{formatMoney(costed.total, trip?.currency)}</span>}
           {costed && costed.status !== "none" && costed.status !== "unpaid" && <PayStatus thing={costed} />}
           {comments > 0 && <span className="row" style={{ gap: 2 }}><MessageCircle size={11} />{comments}</span>}
