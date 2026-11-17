@@ -9,7 +9,7 @@ import { CostEditor, costValueFrom, type CostValue } from "../ui/CostEditor";
 import { OptionChip } from "./FieldValue";
 import { useEngine } from "./engine";
 import {
-  asDate, asIds, asMoney, asPlace, itemParticipants, OPTION_COLORS, fid,
+  asDate, asIds, asMoney, asPlace, asRepeat, itemParticipants, OPTION_COLORS, fid,
   type FieldDef, type FieldOption, type ListDef, type ListItem,
 } from "@/lib/fields";
 import type { Place } from "@/lib/types";
@@ -156,8 +156,57 @@ export function FieldInput({
       return <RelationInput field={field} item={item} disabled={disabled} onChange={onChange} />;
     case "rollup":
       return null;
+    case "repeat": {
+      const r = asRepeat(v);
+      const preset = !r ? "" : `${r.freq}:${r.interval}`;
+      return (
+        <div className="row wrap">
+          <select
+            className="input"
+            style={{ width: "auto", flex: "1 1 180px" }}
+            value={REPEAT_PRESETS.some((p) => p.value === preset) ? preset : preset ? "custom" : ""}
+            disabled={disabled}
+            onChange={(e) => {
+              if (!e.target.value) return onChange(null);
+              if (e.target.value === "custom") return onChange({ freq: "week", interval: 3, until: r?.until ?? null });
+              const [freq, interval] = e.target.value.split(":");
+              onChange({ freq, interval: Number(interval), until: r?.until ?? null });
+            }}
+            aria-label="Repeats"
+          >
+            {REPEAT_PRESETS.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
+            <option value="custom">Custom…</option>
+          </select>
+          {r && !REPEAT_PRESETS.some((p) => p.value === preset) && (
+            <span className="row" style={{ gap: 4 }}>
+              every
+              <input className="input" type="number" min={1} style={{ width: 70 }} value={r.interval} disabled={disabled} onChange={(e) => onChange({ ...r, interval: Math.max(1, Number(e.target.value) || 1) })} aria-label="Every how many" />
+              <select className="input" style={{ width: "auto" }} value={r.freq} disabled={disabled} onChange={(e) => onChange({ ...r, freq: e.target.value })} aria-label="Unit">
+                <option value="day">days</option><option value="week">weeks</option><option value="month">months</option><option value="year">years</option>
+              </select>
+            </span>
+          )}
+          {r && (
+            <label className="row small" style={{ gap: 4 }}>
+              until
+              <input className="input" type="date" value={r.until ?? ""} disabled={disabled} onChange={(e) => onChange({ ...r, until: e.target.value || null })} aria-label="Repeat until" style={{ width: "auto" }} />
+            </label>
+          )}
+        </div>
+      );
+    }
   }
 }
+
+const REPEAT_PRESETS = [
+  { value: "", label: "Doesn't repeat" },
+  { value: "day:1", label: "Every day" },
+  { value: "week:1", label: "Every week" },
+  { value: "week:2", label: "Every 2 weeks" },
+  { value: "month:1", label: "Every month" },
+  { value: "month:3", label: "Every 3 months" },
+  { value: "year:1", label: "Every year" },
+];
 
 function BlurInput({ value, onCommit, multiline, type = "text", disabled, placeholder }: {
   value: string; onCommit: (v: string) => void; multiline?: boolean; type?: string; disabled?: boolean; placeholder?: string;

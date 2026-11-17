@@ -13,6 +13,7 @@ interface TplField {
   linkTo?: string;
   rollup?: FieldDef["rollup"];
   feeds?: FieldDef["feeds"];
+  moneyKind?: FieldDef["moneyKind"];
 }
 
 export interface ListTemplate {
@@ -22,6 +23,8 @@ export interface ListTemplate {
   description: string;
   titleLabel: string;
   fields: TplField[];
+  /** Extra list behavior, e.g. autoPay: ticking done records the payment. */
+  settings?: Record<string, unknown>;
 }
 
 const status = (...opts: [string, OptionKind?][]): TplField["options"] => opts;
@@ -122,8 +125,8 @@ export const LIST_TEMPLATES: ListTemplate[] = [
     titleLabel: "Sponsor",
     fields: [
       { key: "status", name: "Status", type: "status", options: status(["Prospect", "todo"], ["Negotiating", "doing"], ["Signed", "done"], ["Lost", "cancelled"]) },
-      // Sponsor money is income, so it doesn't count as spending.
-      { key: "amount", name: "Deal amount", type: "money", feeds: { budget: false } },
+      // Sponsor money is income: it shows as money coming in, not spending.
+      { key: "amount", name: "Deal amount", type: "money", moneyKind: "income" },
       { key: "due", name: "Invoice due", type: "date" },
       { key: "contact", name: "Contact", type: "text" },
       { key: "email", name: "Email", type: "email" },
@@ -139,10 +142,12 @@ export const LIST_TEMPLATES: ListTemplate[] = [
     fields: [
       { key: "amount", name: "Amount", type: "money" },
       { key: "due", name: "Due", type: "date" },
+      { key: "repeat", name: "Repeats", type: "repeat" },
       { key: "paid", name: "Paid", type: "checkbox" },
       { key: "who", name: "Paid by", type: "person" },
-      { key: "how", name: "How often", type: "select", options: status(["Once"], ["Weekly"], ["Monthly"], ["Yearly"]) },
     ],
+    // Ticking Paid records the payment, and repeating bills roll to their next due date.
+    settings: { autoPay: true },
   },
   {
     key: "chores",
@@ -153,8 +158,38 @@ export const LIST_TEMPLATES: ListTemplate[] = [
     fields: [
       { key: "who", name: "Who", type: "person" },
       { key: "due", name: "Due", type: "date" },
+      { key: "repeat", name: "Repeats", type: "repeat" },
       { key: "done", name: "Done", type: "checkbox" },
-      { key: "how", name: "How often", type: "select", options: status(["Daily"], ["Weekly"], ["Monthly"]) },
+    ],
+  },
+  {
+    key: "routines",
+    name: "Routines & events",
+    icon: "🔁",
+    description: "Standing plans that repeat: date nights, recordings, appointments",
+    titleLabel: "Event",
+    fields: [
+      { key: "when", name: "When", type: "datetime" },
+      { key: "repeat", name: "Repeats", type: "repeat" },
+      { key: "who", name: "Who", type: "people" },
+      { key: "where", name: "Where", type: "place" },
+      { key: "notes", name: "Notes", type: "longtext" },
+    ],
+  },
+  {
+    key: "contacts",
+    name: "Contacts",
+    icon: "📇",
+    description: "People who aren't on Driftbook: vendors, guests, coordinators",
+    titleLabel: "Name",
+    fields: [
+      { key: "role", name: "Role", type: "text" },
+      { key: "company", name: "Company", type: "text" },
+      { key: "phone", name: "Phone", type: "phone" },
+      { key: "email", name: "Email", type: "email" },
+      { key: "website", name: "Website", type: "url" },
+      { key: "address", name: "Address", type: "place", feeds: { map: false } },
+      { key: "notes", name: "Notes", type: "longtext" },
     ],
   },
   {
@@ -243,6 +278,7 @@ export function buildLists(
         else if (f.type === "select" || f.type === "multiselect") def.options = [];
         if (f.linkTo) def.listId = ids[f.linkTo];
         if (f.feeds) def.feeds = f.feeds;
+        if (f.moneyKind) def.moneyKind = f.moneyKind;
         if (f.rollup) def.rollup = f.rollup;
         return def;
       });
@@ -253,7 +289,7 @@ export function buildLists(
       icon: t.icon,
       description: t.description,
       fields,
-      settings: { template: k, titleLabel: t.titleLabel },
+      settings: { template: k, titleLabel: t.titleLabel, ...(t.settings ?? {}) },
       sort_order: startOrder + n,
     };
   });

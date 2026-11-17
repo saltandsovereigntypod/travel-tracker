@@ -4,7 +4,7 @@ import { Star, ExternalLink, MapPin } from "lucide-react";
 import { useTrip } from "../TripProvider";
 import { Avatar } from "../ui/Fields";
 import { useEngine } from "./engine";
-import { asDate, asIds, asMoney, asPlace, linkedItems, numericValue, rollupValue, type FieldDef, type ListDef, type ListItem } from "@/lib/fields";
+import { asDate, asIds, asMoney, asPlace, asRepeat, linkedItems, numericValue, rollupValue, type FieldDef, type ListDef, type ListItem } from "@/lib/fields";
 import { unitLabel } from "@/lib/costs";
 import { formatDay, formatMoney, formatTime, hostname } from "@/lib/format";
 
@@ -25,8 +25,15 @@ export function FieldValue({ field, item, list, compact }: { field: FieldDef; it
 
   switch (field.type) {
     case "text":
-    case "phone":
       return v ? <span className="truncate">{String(v)}</span> : null;
+    case "phone":
+      return v ? <a href={`tel:${String(v).replace(/[^\d+]/g, "")}`} onClick={(e) => e.stopPropagation()} className="truncate">{String(v)}</a> : null;
+    case "repeat": {
+      const r = asRepeat(v);
+      if (!r) return null;
+      const unit = { day: "day", week: "week", month: "month", year: "year" }[r.freq];
+      return <span className="nowrap">🔁 {r.interval === 1 ? `Every ${unit}` : `Every ${r.interval} ${unit}s`}</span>;
+    }
     case "longtext":
       return v ? <span className="truncate muted">{String(v)}</span> : null;
     case "email":

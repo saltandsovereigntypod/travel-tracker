@@ -9,6 +9,7 @@ import { ListItemModal } from "./ItemModal";
 import { ListSettings } from "./ListSettings";
 import { BoardView, CalendarView, CardsView, ChecklistView, MapListView, TableView } from "./Views";
 import { useEngine } from "./engine";
+import { useCommitItem } from "./automation";
 import { itemMoneyTotal, listProgress, statusField, type ListItem } from "@/lib/fields";
 import { dateFields, defaultGroupField, filterItems, groupableFields, placeFields, sortItems } from "@/lib/views";
 import { formatMoney } from "@/lib/format";
@@ -47,6 +48,7 @@ export function ListPage({ listId }: { listId: string }) {
 function ListPageInner({ listId }: { listId: string }) {
   const { rows, canEdit, insert, update, trip, tripId, loading, view, saveView, me } = useTrip();
   const { money } = useEngine();
+  const commit = useCommitItem();
   const params = useSearchParams();
   const router = useRouter();
   const phone = useIsPhone();
@@ -62,7 +64,7 @@ function ListPageInner({ listId }: { listId: string }) {
 
   const prefs: ListPrefs = view.list_prefs?.[listId] ?? {};
   // Tables are cramped on phones, so default to cards there.
-  const viewType: ListViewType = prefs.view ?? (phone ? "cards" : "table");
+  const viewType: ListViewType = phone ? prefs.phoneView ?? "cards" : prefs.view ?? "table";
   const setPrefs = (p: Partial<ListPrefs>) => saveView({ list_prefs: { ...(view.list_prefs ?? {}), [listId]: { ...prefs, ...p } } });
 
   const all = useMemo(() => rows.list_items.filter((i) => i.list_id === listId), [rows.list_items, listId]);
@@ -100,10 +102,10 @@ function ListPageInner({ listId }: { listId: string }) {
     const sf = statusField(list!);
     if (sf) {
       const target = done ? sf.options?.find((o) => o.kind === "done") : sf.options?.find((o) => o.kind === "todo") ?? sf.options?.[0];
-      void update("list_items", item.id, { values: { ...item.values, [sf.id]: target?.id ?? null } });
+      void commit(list!, item, { ...item.values, [sf.id]: target?.id ?? null });
     } else {
       const cb = list!.fields.find((f) => f.type === "checkbox")!;
-      void update("list_items", item.id, { values: { ...item.values, [cb.id]: done } });
+      void commit(list!, item, { ...item.values, [cb.id]: done });
     }
   }
 
@@ -135,7 +137,7 @@ function ListPageInner({ listId }: { listId: string }) {
         <Segmented<ListViewType>
           size="sm"
           value={viewType}
-          onChange={(v) => setPrefs({ view: v })}
+          onChange={(v) => setPrefs(phone ? { phoneView: v } : { view: v })}
           options={views.map((v) => ({ value: v.value, label: <><v.icon size={14} /> <span className={phone ? "sr-only" : undefined}>{v.label}</span></> }))}
         />
         {viewType === "board" && groupableFields(list).length > 1 && (
@@ -209,7 +211,7 @@ function ListPageInner({ listId }: { listId: string }) {
       ) : viewType === "board" ? (
         <BoardView list={list} items={items} onOpen={setOpen} groupField={groupField} canEdit={canEdit} onMove={(id, value) => {
           const it = all.find((x) => x.id === id);
-          if (it && groupField) void update("list_items", id, { values: { ...it.values, [groupField.id]: groupField.type === "people" ? (value ? [value] : []) : value } });
+          if (it && groupField) void commit(list, it, { ...it.values, [groupField.id]: groupField.type === "people" ? (value ? [value] : []) : value });
         }} />
       ) : viewType === "calendar" ? (
         <CalendarView list={list} items={items} onOpen={setOpen} dateField={dateField} />

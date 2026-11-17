@@ -7,6 +7,8 @@ export interface SplitExpense {
   paid_by: string | null;
   split_between: string[];
   split_mode?: SplitMode;
+  /** income: paid_by received the money, which belongs to split_between. */
+  kind?: "expense" | "income";
   /** Weights for "shares", amounts for "exact". */
   split_shares?: Record<string, number>;
 }
@@ -74,8 +76,10 @@ export function netBalances(expenses: SplitExpense[], everyone: string[]): Recor
     if (!e.paid_by || !(e.amount > 0)) continue;
     const shares = expenseShares(e, everyone);
     if (!Object.keys(shares).length) continue;
-    bal[e.paid_by] = (bal[e.paid_by] ?? 0) + Number(e.amount);
-    for (const [person, share] of Object.entries(shares)) bal[person] = (bal[person] ?? 0) - share;
+    // Spending: the payer is owed everyone's shares. Income: the receiver owes everyone theirs.
+    const sign = e.kind === "income" ? -1 : 1;
+    bal[e.paid_by] = (bal[e.paid_by] ?? 0) + sign * Number(e.amount);
+    for (const [person, share] of Object.entries(shares)) bal[person] = (bal[person] ?? 0) - sign * share;
   }
   for (const k of Object.keys(bal)) bal[k] = round(bal[k]);
   return bal;

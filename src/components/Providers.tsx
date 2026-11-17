@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { AuthProvider } from "./AuthProvider";
 import { ToastProvider } from "./ui/Toast";
+import { ReminderChecker } from "./Reminders";
 
 export function Providers({ children }: { children: React.ReactNode }) {
   useEffect(() => {
@@ -13,7 +14,10 @@ export function Providers({ children }: { children: React.ReactNode }) {
   }, []);
   return (
     <ToastProvider>
-      <AuthProvider>{children}</AuthProvider>
+      <AuthProvider>
+        {children}
+        <ReminderChecker />
+      </AuthProvider>
     </ToastProvider>
   );
 }

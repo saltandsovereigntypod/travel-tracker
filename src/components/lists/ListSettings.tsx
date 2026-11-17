@@ -74,6 +74,17 @@ export function ListSettings({ list, open, onClose }: { list: ListDef; open: boo
           </Field>
         </div>
 
+        {list.fields.some((f) => f.type === "money") && (list.fields.some((f) => f.type === "checkbox") || list.fields.some((f) => f.type === "status")) && (
+          <label className="row small" style={{ marginTop: "0.8rem" }}>
+            <input
+              type="checkbox"
+              checked={!!(list.settings as { autoPay?: boolean })?.autoPay}
+              onChange={(e) => update("lists", list.id, { settings: { ...list.settings, autoPay: e.target.checked } })}
+            />
+            When an item is marked done, record its payment automatically
+          </label>
+        )}
+
         <h3 style={{ margin: "1.2rem 0 0.6rem" }}>Fields</h3>
         <div className="stack" style={{ gap: 6 }}>
           {list.fields.map((f, i) => (
@@ -211,7 +222,17 @@ function FieldOptions({ field, list, onPatch, onDelete }: { field: FieldDef; lis
       )}
 
       {field.type === "money" && (
-        <label className="row small"><input type="checkbox" checked={field.feeds?.budget !== false} onChange={(e) => onPatch({ feeds: { ...field.feeds, budget: e.target.checked } })} /> Count this in the budget (turn off for income like sponsor deals)</label>
+        <>
+          <Field label="This money is">
+            <select className="input" value={field.moneyKind ?? "cost"} onChange={(e) => onPatch({ moneyKind: e.target.value as "cost" | "income" })}>
+              <option value="cost">Spending (counts toward the budget)</option>
+              <option value="income">Money coming in (sponsors, gifts, refunds)</option>
+            </select>
+          </Field>
+          {field.moneyKind !== "income" && (
+            <label className="row small"><input type="checkbox" checked={field.feeds?.budget !== false} onChange={(e) => onPatch({ feeds: { ...field.feeds, budget: e.target.checked } })} /> Count this in the budget</label>
+          )}
+        </>
       )}
       {(field.type === "date" || field.type === "datetime") && (
         <label className="row small"><input type="checkbox" checked={field.feeds?.calendar !== false} onChange={(e) => onPatch({ feeds: { ...field.feeds, calendar: e.target.checked } })} /> Show on the calendar</label>

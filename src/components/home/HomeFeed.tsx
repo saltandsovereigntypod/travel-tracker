@@ -6,7 +6,7 @@ import { CalendarDays, CheckCircle2, Wallet, AlertCircle, Loader2 } from "lucide
 import { useAuth } from "../AuthProvider";
 import { supabase } from "@/lib/supabase";
 import { addDays, formatDay, formatMoney, formatTime, splitLocal, todayString } from "@/lib/format";
-import { assignedTo, calendarEntries, itemMoneyTotal, type ListDef, type ListItem } from "@/lib/fields";
+import { assignedTo, calendarEntries, itemMoneyTotal, repeatOf, type ListDef, type ListItem } from "@/lib/fields";
 import { expenseShares, netBalances } from "@/lib/balances";
 import { templateFor } from "@/lib/spaces";
 import type { Expense, Flight, ItineraryItem, Member, PackingItem, Stay, Trip } from "@/lib/types";
@@ -117,7 +117,11 @@ export function HomeFeed({ spaces }: { spaces: Trip[] }) {
       const cur = space(list.trip_id).currency;
       const total = itemMoneyTotal(item, list, { going: going(list.trip_id) });
       if (total == null) continue;
-      const paid = data.expenses.filter((e) => e.linked_type === "list_item" && e.linked_id === item.id).reduce((n, e) => n + homeAmount(e, cur), 0);
+      const dates0 = calendarEntries({ lists: [list], items: [item] }).filter((c) => !c.repeat).map((c) => c.day);
+      const period = repeatOf(item, list) ? dates0[0] ?? null : undefined;
+      const paid = data.expenses
+        .filter((e) => e.linked_type === "list_item" && e.linked_id === item.id && e.kind !== "income" && (period === undefined || e.period === period))
+        .reduce((n, e) => n + homeAmount(e, cur), 0);
       const left = Math.round((total - paid) * 100) / 100;
       if (left <= 0.004) continue;
       const dates = calendarEntries({ lists: [list], items: [item] }).map((c) => c.day).sort();
@@ -135,11 +139,11 @@ export function HomeFeed({ spaces }: { spaces: Trip[] }) {
         const everyone = data.members.filter((m) => m.trip_id === s.id).map((m) => m.user_id);
         const g = going(s.id);
         const bal = netBalances(
-          ex.map((e) => ({ amount: homeAmount(e, s.currency), paid_by: e.paid_by, split_between: e.split_between.length ? e.split_between : g, split_mode: e.split_mode, split_shares: e.split_shares })),
+          ex.map((e) => ({ amount: homeAmount(e, s.currency), paid_by: e.paid_by, split_between: e.split_between.length ? e.split_between : g, split_mode: e.split_mode, split_shares: e.split_shares, kind: e.kind })),
           everyone,
         )[me] ?? 0;
         const myShare = ex
-          .filter((e) => e.category !== "settlement")
+          .filter((e) => e.category !== "settlement" && e.kind !== "income")
           .reduce((n, e) => n + (expenseShares({ amount: homeAmount(e, s.currency), paid_by: e.paid_by, split_between: e.split_between.length ? e.split_between : g, split_mode: e.split_mode, split_shares: e.split_shares }, g)[me] ?? 0), 0);
         return { space: s, bal, myShare };
       })

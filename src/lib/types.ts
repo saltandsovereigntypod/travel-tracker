@@ -195,6 +195,10 @@ export interface Expense {
   linked_type: LinkedType | null;
   linked_id: string | null;
   is_deposit: boolean;
+  /** Money out (expense) or money in (income). */
+  kind: "expense" | "income";
+  /** For repeating items: the due date this payment covers. */
+  period: string | null;
   spent_on: string | null;
   notes: string;
   created_by: string | null;
@@ -273,6 +277,8 @@ export type ListViewType = "table" | "cards" | "board" | "calendar" | "map" | "c
 
 export interface ListPrefs {
   view?: ListViewType;
+  /** Separate choice on phones, where tables are cramped. */
+  phoneView?: ListViewType;
   /** Board: field to make columns from. */
   groupBy?: string;
   /** Calendar: which date field to use. */

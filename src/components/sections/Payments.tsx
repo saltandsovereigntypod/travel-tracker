@@ -12,16 +12,17 @@ export function PayStatus({ thing }: { thing: CostedThing | undefined }) {
   const { trip } = useTrip();
   const cur = trip?.currency ?? "USD";
   if (!thing || thing.status === "none") return null;
-  if (thing.status === "paid") return <span className="pay-status pay-paid">✓ Paid</span>;
-  if (thing.status === "deposit") return <span className="pay-status pay-deposit">{formatMoney(thing.paid, cur)} paid · {formatMoney(thing.remaining, cur)} left</span>;
-  return <span className="pay-status pay-unpaid">Not paid yet</span>;
+  const verb = thing.income ? "received" : "paid";
+  if (thing.status === "paid") return <span className="pay-status pay-paid">✓ {thing.income ? "Received" : "Paid"}</span>;
+  if (thing.status === "deposit") return <span className="pay-status pay-deposit">{formatMoney(thing.paid, cur)} {verb} · {formatMoney(thing.remaining, cur)} left</span>;
+  return <span className="pay-status pay-unpaid">{thing.income ? "Not received yet" : "Not paid yet"}</span>;
 }
 
 /** Shows what a plan/flight/stay costs, what's been paid, and buttons to pay it. */
-export function PaymentPanel({ type, id, category }: { type: LinkedType; id: string; category: string }) {
+export function PaymentPanel({ type, id, category, income = false }: { type: LinkedType; id: string; category: string; income?: boolean }) {
   const { canEdit, trip, nameOf } = useTrip();
   const money = useMoney();
-  const thing = money.byKey[`${type}:${id}`];
+  const thing = (income ? money.incomeByKey : money.byKey)[`${type}:${id}`];
   const cur = trip?.currency ?? "USD";
   const [editing, setEditing] = useState<Expense | "new" | null>(null);
   const [preset, setPreset] = useState<ExpensePreset | null>(null);
@@ -38,13 +39,13 @@ export function PaymentPanel({ type, id, category }: { type: LinkedType; id: str
   return (
     <div className="pay-panel">
       <div className="row-between">
-        <strong className="small row"><CircleDollarSign size={15} /> Payment</strong>
+        <strong className="small row"><CircleDollarSign size={15} /> {income ? "Money in" : "Payment"}{thing.period && <span className="tiny muted" style={{ fontWeight: 500 }}>· for {formatDay(thing.period, { weekday: undefined })}</span>}</strong>
         <PayStatus thing={thing} />
       </div>
       {thing.total != null && (
         <div className="row-between small">
           <span className="muted">Total {formatMoney(thing.total, cur)}</span>
-          <span>{thing.remaining > 0 ? <>Left to pay <strong>{formatMoney(thing.remaining, cur)}</strong></> : thing.paid > 0 ? "All paid" : ""}</span>
+          <span>{thing.remaining > 0 ? <>{income ? "Still expected" : "Left to pay"} <strong>{formatMoney(thing.remaining, cur)}</strong></> : thing.paid > 0 ? (income ? "All received" : "All paid") : ""}</span>
         </div>
       )}
       {thing.payments.length > 0 && (
@@ -52,7 +53,7 @@ export function PaymentPanel({ type, id, category }: { type: LinkedType; id: str
           {thing.payments.map((e) => (
             <button key={e.id} type="button" className="check-row" style={{ border: 0, background: "none", textAlign: "left", cursor: "pointer", color: "inherit", padding: "0.3rem 0.2rem" }} onClick={() => open(null, e)}>
               {e.is_deposit ? <PiggyBank size={14} /> : <CheckCircle2 size={14} />}
-              <span className="grow small">{e.is_deposit ? "Deposit" : "Payment"} · {nameOf(e.paid_by)}{e.spent_on ? ` · ${formatDay(e.spent_on)}` : ""}</span>
+              <span className="grow small">{income ? "Received" : e.is_deposit ? "Deposit" : "Payment"} · {nameOf(e.paid_by)}{e.spent_on ? ` · ${formatDay(e.spent_on)}` : ""}</span>
               <strong className="small">{formatMoney(homeAmount(e, cur), cur)}</strong>
             </button>
           ))}
@@ -60,11 +61,17 @@ export function PaymentPanel({ type, id, category }: { type: LinkedType; id: str
       )}
       {canEdit && thing.status !== "paid" && (
         <div className="row wrap">
-          <button type="button" className="btn btn-sm" onClick={() => open({ title: `${thing.title} (deposit)`, category, linked_type: type, linked_id: id, is_deposit: true, split_between: thing.participants }, "new")}>
-            <PiggyBank size={14} /> Add deposit
-          </button>
-          <button type="button" className="btn btn-sm btn-primary" onClick={() => open({ title: thing.title, amount: thing.total != null ? thing.remaining : undefined, category, linked_type: type, linked_id: id, split_between: thing.participants }, "new")}>
-            <CheckCircle2 size={14} /> Mark as paid
+          {!income && (
+            <button type="button" className="btn btn-sm" onClick={() => open({ title: `${thing.name ?? thing.title} (deposit)`, category, linked_type: type, linked_id: id, is_deposit: true, split_between: thing.participants, period: thing.period ?? null }, "new")}>
+              <PiggyBank size={14} /> Add deposit
+            </button>
+          )}
+          <button
+            type="button"
+            className="btn btn-sm btn-primary"
+            onClick={() => open({ title: thing.name ?? thing.title, amount: thing.total != null ? thing.remaining : undefined, category, linked_type: type, linked_id: id, split_between: thing.participants, period: thing.period ?? null, kind: income ? "income" : "expense" }, "new")}
+          >
+            <CheckCircle2 size={14} /> {income ? "Mark as received" : "Mark as paid"}
           </button>
         </div>
       )}

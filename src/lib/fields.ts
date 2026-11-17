@@ -25,7 +25,8 @@ export type FieldType =
   | "place"
   | "rating"
   | "relation"
-  | "rollup";
+  | "rollup"
+  | "repeat";
 
 export type OptionKind = "todo" | "doing" | "done" | "cancelled";
 
@@ -49,6 +50,17 @@ export interface FieldDef {
   rollup?: { via: string; target?: string; op: RollupOp };
   /** Turn individual flows off. Everything feeds by default. */
   feeds?: { budget?: boolean; calendar?: boolean; map?: boolean };
+  /** money: cost (spending, the default) or income (money coming in, e.g. sponsor deals). */
+  moneyKind?: "cost" | "income";
+}
+
+export type RepeatFreq = "day" | "week" | "month" | "year";
+
+/** repeat: how an item's date recurs (bills, chores, standing events). */
+export interface RepeatValue {
+  freq: RepeatFreq;
+  interval: number;
+  until?: string | null;
 }
 
 export interface ListDef {
@@ -93,6 +105,7 @@ export const FIELD_TYPES: { type: FieldType; label: string; icon: string; feeds?
   { type: "money", label: "Money", icon: "$", feeds: "Budget", group: "Basics" },
   { type: "date", label: "Date", icon: "📅", feeds: "Calendar", group: "Basics" },
   { type: "datetime", label: "Date & time", icon: "🕒", feeds: "Calendar", group: "Basics" },
+  { type: "repeat", label: "Repeats", icon: "🔁", feeds: "Calendar", group: "Basics" },
   { type: "checkbox", label: "Checkbox", icon: "☑", feeds: "Progress", group: "Choices" },
   { type: "status", label: "Status", icon: "◐", feeds: "Progress", group: "Choices" },
   { type: "select", label: "Dropdown", icon: "▾", group: "Choices" },
@@ -304,11 +317,91 @@ export function itemMoneyTotal(item: ListItem, list: ListDef, money: MoneyContex
   if (isCancelled(item, list)) return null;
   let total: number | null = null;
   for (const f of list.fields) {
-    if (f.type !== "money" || f.feeds?.budget === false) continue;
+    if (f.type !== "money" || f.feeds?.budget === false || f.moneyKind === "income") continue;
     const n = numericValue(item, f, list, money);
     if (n != null) total = (total ?? 0) + n;
   }
   return total == null ? null : Math.round(total * 100) / 100;
+}
+
+/** Total of an item's income money fields (sponsor deals, gifts…). */
+export function itemIncomeTotal(item: ListItem, list: ListDef, money: MoneyContext): number | null {
+  if (isCancelled(item, list)) return null;
+  let total: number | null = null;
+  for (const f of list.fields) {
+    if (f.type !== "money" || f.moneyKind !== "income") continue;
+    const n = numericValue(item, f, list, money);
+    if (n != null) total = (total ?? 0) + n;
+  }
+  return total == null ? null : Math.round(total * 100) / 100;
+}
+
+// ---------------------------------------------------------------- repeats
+
+export function asRepeat(v: unknown): RepeatValue | null {
+  if (!v || typeof v !== "object") return null;
+  const r = v as Partial<RepeatValue>;
+  if (!r.freq || !["day", "week", "month", "year"].includes(r.freq)) return null;
+  return { freq: r.freq, interval: Math.max(1, Number(r.interval) || 1), until: r.until ?? null };
+}
+
+export function repeatOf(item: ListItem, list: ListDef): RepeatValue | null {
+  const f = list.fields.find((x) => x.type === "repeat");
+  return f ? asRepeat(item.values[f.id]) : null;
+}
+
+function addMonthsClamped(day: string, months: number, anchorDay: number): string {
+  const [y, m] = day.split("-").map(Number);
+  const total = y * 12 + (m - 1) + months;
+  const ny = Math.floor(total / 12);
+  const nm = total % 12;
+  const last = new Date(Date.UTC(ny, nm + 1, 0)).getUTCDate();
+  return `${ny}-${String(nm + 1).padStart(2, "0")}-${String(Math.min(anchorDay, last)).padStart(2, "0")}`;
+}
+
+/** The next date after `day` ("monthly on the 31st" lands on the 30th/28th as needed). */
+export function nextOccurrence(day: string, rule: RepeatValue, anchorDay = Number(day.slice(8, 10))): string {
+  const n = rule.interval;
+  if (rule.freq === "month") return addMonthsClamped(day, n, anchorDay);
+  if (rule.freq === "year") return addMonthsClamped(day, 12 * n, anchorDay);
+  const d = new Date(`${day}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + (rule.freq === "week" ? 7 * n : n));
+  return d.toISOString().slice(0, 10);
+}
+
+/** Every occurrence between from and to (inclusive), starting at `start`. */
+export function occurrences(start: string, rule: RepeatValue, from: string, to: string, max = 400): string[] {
+  const out: string[] = [];
+  const anchor = Number(start.slice(8, 10));
+  let d = start;
+  for (let i = 0; i < 5000 && d <= to && out.length < max; i++) {
+    if (rule.until && d > rule.until) break;
+    if (d >= from) out.push(d);
+    d = nextOccurrence(d, rule, anchor);
+  }
+  return out;
+}
+
+/**
+ * "Done" on a repeating item completes this round and schedules the next:
+ * its date moves forward and its done state resets.
+ */
+export function advanceRecurring(item: ListItem, list: ListDef): Record<string, unknown> | null {
+  const rule = repeatOf(item, list);
+  const df = list.fields.find((f) => f.type === "date" || f.type === "datetime");
+  if (!rule || !df) return null;
+  const cur = asDate(df, item.values[df.id]);
+  if (!cur?.date) return null;
+  const next = nextOccurrence(cur.date, rule);
+  if (rule.until && next > rule.until) return null;
+  const values: Record<string, unknown> = { ...item.values, [df.id]: df.type === "date" ? next : { date: next, time: cur.time } };
+  const sf = statusField(list);
+  if (sf) values[sf.id] = sf.options?.find((o) => o.kind === "todo")?.id ?? null;
+  else {
+    const cb = list.fields.find((f) => f.type === "checkbox");
+    if (cb) values[cb.id] = false;
+  }
+  return values;
 }
 
 export interface ItemDate {
@@ -317,18 +410,39 @@ export interface ItemDate {
   field: FieldDef;
   day: string;
   time: string | null;
+  /** A future repeat of a recurring item (not its current due date). */
+  repeat?: boolean;
 }
 
-/** Calendar entries from every date field that feeds the calendar. */
-export function calendarEntries(ctx: EngineContext): ItemDate[] {
+function defaultWindow() {
+  const now = Date.now();
+  return {
+    from: new Date(now - 62 * 86_400_000).toISOString().slice(0, 10),
+    to: new Date(now + 400 * 86_400_000).toISOString().slice(0, 10),
+  };
+}
+
+/**
+ * Calendar entries from every date field that feeds the calendar.
+ * Repeating items appear on each occurrence inside the window.
+ */
+export function calendarEntries(ctx: EngineContext, window?: { from: string; to: string }): ItemDate[] {
   const out: ItemDate[] = [];
+  const win = window ?? defaultWindow();
   for (const item of ctx.items) {
     const list = ctx.lists.find((l) => l.id === item.list_id);
     if (!list || isCancelled(item, list)) continue;
+    const rule = repeatOf(item, list);
+    const firstDate = list.fields.find((f) => f.type === "date" || f.type === "datetime");
     for (const f of list.fields) {
       if ((f.type !== "date" && f.type !== "datetime") || f.feeds?.calendar === false) continue;
       const d = asDate(f, item.values[f.id]);
-      if (d?.date) out.push({ item, list, field: f, day: d.date, time: d.time });
+      if (!d?.date) continue;
+      if (rule && f === firstDate) {
+        for (const day of occurrences(d.date, rule, win.from, win.to)) out.push({ item, list, field: f, day, time: d.time, repeat: day !== d.date });
+      } else {
+        out.push({ item, list, field: f, day: d.date, time: d.time });
+      }
     }
   }
   return out.sort((a, b) => a.day.localeCompare(b.day) || (a.time ?? "99").localeCompare(b.time ?? "99"));
@@ -360,7 +474,9 @@ export function itemFeeds(item: ListItem, list: ListDef): string[] {
   const feeds = new Set<string>();
   for (const f of list.fields) {
     const v = item.values[f.id];
-    if (f.type === "money" && f.feeds?.budget !== false && asMoney(v)) feeds.add("Budget");
+    if (f.type === "money" && f.moneyKind === "income" && asMoney(v)) feeds.add("Income");
+    else if (f.type === "money" && f.feeds?.budget !== false && asMoney(v)) feeds.add("Budget");
+    if (f.type === "repeat" && asRepeat(v)) feeds.add("Repeats");
     if ((f.type === "date" || f.type === "datetime") && f.feeds?.calendar !== false && asDate(f, v)) feeds.add("Calendar");
     if (f.type === "place" && f.feeds?.map !== false && asPlace(v)?.lat != null) feeds.add("Map");
     if ((f.type === "person" || f.type === "people") && asIds(v).length) feeds.add("Assignments");

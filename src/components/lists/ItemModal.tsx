@@ -10,8 +10,9 @@ import { PaymentPanel } from "../sections/Payments";
 import { FieldInput, LinkPicker } from "./FieldInput";
 import { FieldValue } from "./FieldValue";
 import { listHref, useEngine } from "./engine";
+import { useCommitItem } from "./automation";
 import {
-  asIds, backlinksFor, fieldTypeMeta, itemFeeds, itemMoneyTotal, linkedItems, stripLinks,
+  asIds, backlinksFor, fieldTypeMeta, itemFeeds, itemIncomeTotal, itemMoneyTotal, linkedItems, stripLinks,
   type FieldDef, type FieldOption, type ListDef, type ListItem,
 } from "@/lib/fields";
 
@@ -26,6 +27,7 @@ export function ListItemModal({ list, item, onClose }: { list: ListDef; item: Li
   const { update, remove, canEdit, tripId, rows } = useTrip();
   const { ctx, money, itemById } = useEngine();
   const addOption = useAddOption(list);
+  const commit = useCommitItem();
   // Always show the freshest copy (others may be editing live).
   const live = item ? itemById(item.id) ?? item : null;
   const [title, setTitle] = useState("");
@@ -36,8 +38,9 @@ export function ListItemModal({ list, item, onClose }: { list: ListDef; item: Li
   }
   if (!live) return null;
 
-  const setValue = (fieldId: string, value: unknown) => update("list_items", live.id, { values: { ...live.values, [fieldId]: value } });
+  const setValue = (fieldId: string, value: unknown) => commit(list, live, { ...live.values, [fieldId]: value });
   const total = itemMoneyTotal(live, list, money);
+  const income = itemIncomeTotal(live, list, money);
   const feeds = itemFeeds(live, list);
   const backlinks = backlinksFor(list, ctx);
   const titleLabel = (list.settings as { titleLabel?: string })?.titleLabel ?? "Name";
@@ -139,8 +142,16 @@ export function ListItemModal({ list, item, onClose }: { list: ListDef; item: Li
 
         {total != null && (
           <div style={{ marginTop: "0.8rem" }}>
-            <PaymentPanel type="list_item" id={live.id} category={list.name.toLowerCase().includes("vendor") ? "other" : "other"} />
+            <PaymentPanel type="list_item" id={live.id} category="other" />
           </div>
+        )}
+        {income != null && (
+          <div style={{ marginTop: "0.8rem" }}>
+            <PaymentPanel type="list_item" id={live.id} category="other" income />
+          </div>
+        )}
+        {(list.settings as { autoPay?: boolean })?.autoPay && total != null && (
+          <p className="tiny muted">Ticking it done records the payment automatically{list.fields.some((f) => f.type === "repeat") ? " and, if it repeats, moves it to the next due date" : ""}.</p>
         )}
 
         {list.fields.some((f) => f.type === "relation") && rows.lists.length < 2 && (
