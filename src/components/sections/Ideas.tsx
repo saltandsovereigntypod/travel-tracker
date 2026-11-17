@@ -164,7 +164,7 @@ function IdeaCard({ idea, compact, onEdit, onSchedule }: { idea: Idea; compact?:
     <article className={clsx("card idea-card card-hover", `status-${idea.status}`)}>
       {!compact && (
         <button
-          className="idea-img"
+          className={clsx("idea-img", !idea.image_url && "noimg")}
           onClick={onEdit}
           style={{ border: 0, cursor: "pointer", ...(idea.image_url ? { backgroundImage: `url("${idea.image_url.replace(/"/g, "")}")` } : {}) }}
           aria-label={`Open ${idea.title}`}
@@ -175,7 +175,10 @@ function IdeaCard({ idea, compact, onEdit, onSchedule }: { idea: Idea; compact?:
       <div className="idea-body">
         <div className="row-between" style={{ alignItems: "flex-start" }}>
           <button onClick={onEdit} style={{ all: "unset", cursor: "pointer" }}>
-            <h3>{compact && <span style={{ marginRight: 6 }}>{cat.emoji}</span>}{idea.title}</h3>
+            <h3>
+              {compact ? <span style={{ marginRight: 6 }}>{cat.emoji}</span> : !idea.image_url && <span className="show-phone" style={{ marginRight: 6 }}>{cat.emoji}</span>}
+              {idea.title}
+            </h3>
           </button>
           {idea.status === "planned" && <span className="chip chip-ok">Planned</span>}
           {idea.status === "maybe" && <span className="chip chip-2">Maybe</span>}

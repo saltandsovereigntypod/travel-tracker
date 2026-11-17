@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Plus, CalendarDays, MapPin, Loader2 } from "lucide-react";
 import { RequireAuth, TopBar } from "@/components/AppChrome";
+import { InstallPrompt } from "@/components/InstallPrompt";
 import { useAuth } from "@/components/AuthProvider";
 import { Modal } from "@/components/ui/Modal";
 import { EmptyState, Field } from "@/components/ui/Fields";
@@ -68,6 +69,7 @@ function TripsInner() {
           </button>
         </div>
 
+        <InstallPrompt />
         {householdInvite && (
           <div className="card card-tight row wrap" style={{ marginBottom: "1rem", background: "var(--soft)" }}>
             <span className="grow small">💞 Someone wants to link households with you, so you settle up together on shared trips.</span>

@@ -71,6 +71,7 @@ export function ItinerarySection({ compact = false }: { compact?: boolean }) {
   const [dragging, setDragging] = useState<ItineraryItem | null>(null);
   const [draggingIdea, setDraggingIdea] = useState<Idea | null>(null);
   const [showTray, setShowTray] = useState(true);
+  const [ideasOpen, setIdeasOpen] = useState(false);
   const scheduleIdea = useScheduleIdea();
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -141,10 +142,19 @@ export function ItinerarySection({ compact = false }: { compact?: boolean }) {
         <div className="section-head">
           <div>
             <h1>Itinerary</h1>
-            <p>Drag plans between days. Flights and stays appear on their dates automatically.</p>
+            <p>
+              <span className="hide-phone">Drag plans between days. </span>
+              <span className="show-phone">Tap a plan to edit it or change its day. </span>
+              Flights and stays appear on their dates automatically.
+            </p>
           </div>
           <div className="toolbar">
-            <Segmented size="sm" value={layout} onChange={setLayout} options={[{ value: "list", label: "Days" }, { value: "board", label: "Columns" }]} />
+            <span className="hide-phone"><Segmented size="sm" value={layout} onChange={setLayout} options={[{ value: "list", label: "Days" }, { value: "board", label: "Columns" }]} /></span>
+            {canEdit && (
+              <button className="btn btn-sm show-tablet" onClick={() => setIdeasOpen(true)}>
+                <Lightbulb size={14} /> Ideas
+              </button>
+            )}
             {canEdit && (
               <button className={clsx("btn btn-sm hide-tablet", showTray && "btn-primary")} onClick={() => setShowTray((t) => !t)} title="Drag ideas onto days">
                 <Lightbulb size={14} /> Ideas
@@ -166,6 +176,21 @@ export function ItinerarySection({ compact = false }: { compact?: boolean }) {
             <Link href={`/trips/${tripId}/settings`} style={{ color: "var(--accent)" }}>Trip settings →</Link>
           </p>
         </div>
+      )}
+
+      {!compact && days.length > 3 && (
+        <nav className="day-jump" aria-label="Jump to day">
+          {days.map((d, i) => (
+            <button
+              key={d}
+              className={clsx(d === today && "today")}
+              onClick={() => document.getElementById(`day-${d}`)?.scrollIntoView({ behavior: "smooth", block: "start" })}
+            >
+              {formatDay(d, { weekday: "short", month: undefined, day: undefined })} {formatDay(d, { weekday: undefined, month: undefined })}
+              <small>Day {i + 1}</small>
+            </button>
+          ))}
+        </nav>
       )}
 
       {compact && visibleDays.length === 0 && unscheduled.length === 0 ? (
@@ -205,6 +230,9 @@ export function ItinerarySection({ compact = false }: { compact?: boolean }) {
         <Link className="btn btn-sm btn-ghost" style={{ marginTop: "0.6rem" }} href={`/trips/${tripId}/itinerary`}>Full itinerary →</Link>
       )}
       <ItemModal target={editing} onClose={() => setEditing(null)} />
+      <Modal open={ideasOpen} onClose={() => setIdeasOpen(false)} title="Schedule an idea">
+        <IdeasTray bare />
+      </Modal>
     </div>
   );
 }
@@ -240,7 +268,7 @@ function DayColumn({
   ];
 
   return (
-    <section className={clsx("card day-col", compact && "card-tight")} style={isToday ? { outline: "2px solid var(--accent)" } : undefined}>
+    <section id={day ? `day-${day}` : "day-unscheduled"} className={clsx("card day-col", compact && "card-tight")} style={isToday ? { outline: "2px solid var(--accent)" } : undefined}>
       <div className="day-head">
         <div>
           <div className="day-num">{day ? (index >= 0 ? `Day ${index + 1}` : "Outside trip dates") : "Unscheduled"}{isToday && " · Today"}</div>
@@ -479,7 +507,7 @@ function sameSet(a: string[], b: string[]) {
 }
 
 /** Unscheduled ideas, most-wanted first. Drag one onto a day, or tap to pick a day. */
-function IdeasTray() {
+function IdeasTray({ bare = false }: { bare?: boolean }) {
   const { rows } = useTrip();
   const scores = useIdeaScores();
   const [picking, setPicking] = useState<Idea | null>(null);
@@ -487,11 +515,14 @@ function IdeasTray() {
     .filter((i) => i.status === "open" || i.status === "maybe")
     .sort((a, b) => (scores[b.id]?.score ?? 0) - (scores[a.id]?.score ?? 0));
   return (
-    <aside className="card ideas-tray" aria-label="Ideas to schedule">
-      <div>
-        <h3 className="row"><Lightbulb size={16} /> Ideas</h3>
-        <p className="tiny muted">Drag onto a day, or tap to choose one.</p>
-      </div>
+    <aside className={bare ? "stack" : "card ideas-tray"} style={bare ? { gap: "0.5rem" } : undefined} aria-label="Ideas to schedule">
+      {!bare && (
+        <div>
+          <h3 className="row"><Lightbulb size={16} /> Ideas</h3>
+          <p className="tiny muted">Drag onto a day, or tap to choose one.</p>
+        </div>
+      )}
+      {bare && <p className="small muted">Most-wanted first. Tap one to pick its day.</p>}
       {ideas.length === 0 && <p className="small muted">Nothing waiting. Add ideas on the Ideas page.</p>}
       {ideas.map((i) => <TrayIdea key={i.id} idea={i} up={scores[i.id]?.up ?? 0} onTap={() => setPicking(i)} />)}
       <ScheduleModal idea={picking} onClose={() => setPicking(null)} />

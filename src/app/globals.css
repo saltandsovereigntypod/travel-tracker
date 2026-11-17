@@ -608,3 +608,57 @@ input[type="checkbox"] { accent-color: var(--accent); width: 18px; height: 18px;
 .tray-idea:active { cursor: grabbing; }
 @media (max-width: 1100px) { .itin-with-tray { grid-template-columns: 1fr; } .ideas-tray { display: none; } }
 @media (max-width: 1100px) { .hide-tablet { display: none; } }
+
+/* ---------------------------------------------------------------- phones */
+.show-phone { display: none; }
+.day-jump { display: flex; gap: 0.35rem; overflow-x: auto; padding: 0.2rem 0 0.6rem; margin-bottom: 0.4rem; scrollbar-width: none; position: sticky; top: 57px; z-index: 5; background: linear-gradient(var(--bg) 70%, transparent); }
+.day-jump::-webkit-scrollbar { display: none; }
+.day-jump button { flex: none; border: 1px solid var(--border); background: var(--surface); color: var(--ink); border-radius: 10px; padding: 0.3rem 0.55rem; font: 600 0.8rem var(--font-body); cursor: pointer; display: flex; flex-direction: column; align-items: center; min-width: 52px; }
+.day-jump button small { font-weight: 500; font-size: 0.68rem; color: var(--muted); }
+.day-jump button.today { border-color: var(--accent); color: var(--accent); }
+.install-bar { display: flex; align-items: center; gap: 0.7rem; padding: 0.7rem 0.9rem; border-radius: 14px; background: var(--soft); border: 1px solid var(--border); margin-bottom: 1rem; font-size: 0.88rem; }
+.install-bar img { width: 36px; height: 36px; border-radius: 10px; flex: none; }
+@media (max-width: 720px) {
+  .show-phone { display: revert; }
+  .hide-phone { display: none !important; }
+  /* 16px stops iPhones zooming into fields when you tap them. */
+  .input, select.input, textarea.input { font-size: 16px; min-height: 44px; }
+  .btn { min-height: 44px; }
+  .btn-sm { min-height: 38px; padding: 0 0.8rem; }
+  .icon-btn { width: 40px; height: 40px; }
+  .vote-btn { min-height: 38px; padding: 0.35rem 0.85rem; }
+  .chip-toggle { min-height: 36px; }
+  .check-row { min-height: 46px; }
+  .segmented { flex-wrap: nowrap; overflow-x: auto; max-width: 100%; scrollbar-width: none; }
+  .segmented::-webkit-scrollbar { display: none; }
+  .segmented button { min-height: 36px; white-space: nowrap; }
+  .section-head { margin-bottom: 0.8rem; }
+  .section-head h1 { font-size: 1.9rem; }
+  .toolbar { width: 100%; }
+  .idea-img.noimg { display: none; }
+  .idea-img { aspect-ratio: auto; height: 140px; }
+  .grid-cards { grid-template-columns: 1fr; gap: 0.75rem; }
+  .main { padding-left: 0.85rem; padding-right: 0.85rem; }
+  .card { padding: 0.95rem; }
+  .itin-time { min-width: 54px; }
+  .modal-body { padding-left: 1rem; padding-right: 1rem; }
+  .modal-foot { padding-bottom: calc(0.8rem + env(safe-area-inset-bottom)); }
+  .modal-foot .btn { flex: 1 1 auto; }
+  .stat strong { font-size: 1.35rem; }
+  .pass-code { font-size: 1.5rem; }
+}
+/* Installed app: keep the top bar clear of the iPhone notch / status bar. */
+@media (display-mode: standalone) {
+  .topbar { padding-top: calc(0.6rem + env(safe-area-inset-top)); }
+}
+.show-tablet { display: none; }
+@media (max-width: 1100px) { .show-tablet { display: inline-flex; } }
+.day-col { scroll-margin-top: 130px; }
+@media (display-mode: standalone) {
+  .landing, .auth-wrap { padding-top: calc(1.5rem + env(safe-area-inset-top)); }
+}
+@media (max-width: 720px) {
+  .block-title a { padding: 0.55rem 0.4rem; margin: -0.55rem -0.4rem; }
+  .color-dot-btn { width: 30px !important; height: 30px !important; border-radius: 15px !important; }
+  .maplibregl-ctrl-group button { width: 38px !important; height: 38px !important; }
+}

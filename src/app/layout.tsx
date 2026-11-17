@@ -7,8 +7,8 @@ export const metadata: Metadata = {
   description: "Plan trips together. Design your own view. Ideas, itinerary, flights, stays, budget and memories in one beautiful place.",
   applicationName: "Driftbook",
   manifest: "/manifest.webmanifest",
-  icons: { icon: "/icon.svg", apple: "/icon-192.png" },
-  appleWebApp: { capable: true, title: "Driftbook", statusBarStyle: "default" },
+  icons: { icon: "/icon.svg", apple: "/apple-touch-icon.png" },
+  appleWebApp: { capable: true, title: "Driftbook", statusBarStyle: "black-translucent" },
 };
 
 export const viewport: Viewport = {

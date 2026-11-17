@@ -92,7 +92,7 @@ function MemberRow({ member: m }: { member: Member }) {
       {isMe && (
         <div className="row" style={{ gap: 3 }} title="Your color">
           {COLORS.map((c) => (
-            <button key={c} onClick={() => patch({ color: c })} aria-label={`Color ${c}`} style={{ width: 18, height: 18, borderRadius: 9, border: c === m.color ? "2px solid var(--ink)" : "2px solid transparent", background: c, cursor: "pointer" }} />
+            <button key={c} className="color-dot-btn" onClick={() => patch({ color: c })} aria-label={`Color ${c}`} style={{ width: 18, height: 18, borderRadius: 9, border: c === m.color ? "2px solid var(--ink)" : "2px solid transparent", background: c, cursor: "pointer" }} />
           ))}
         </div>
       )}
