@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { ThumbsUp, ThumbsDown, MessageCircle, Plus, ExternalLink, CalendarPlus, MapPin, Lightbulb, Trash2, Pencil } from "lucide-react";
 import clsx from "clsx";
+import { LinkedMemories } from "../memories/Memories";
 import { useTrip } from "../TripProvider";
 import { ModuleTitle } from "../ModuleTitle";
 import { Modal } from "../ui/Modal";
@@ -349,6 +350,7 @@ function IdeaDetails({ idea, onSchedule }: { idea: Idea; onSchedule: () => void 
       {canEdit && idea.status !== "planned" && (
         <button className="btn btn-primary" style={{ alignSelf: "flex-start" }} onClick={onSchedule}><CalendarPlus size={15} /> Add to itinerary</button>
       )}
+      <LinkedMemories type="idea" id={idea.id} />
       <div className="detail-section">
         <h3>Comments</h3>
         <CommentThread entity="idea" id={idea.id} />

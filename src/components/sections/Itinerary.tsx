@@ -8,6 +8,7 @@ import {
 } from "@dnd-kit/core";
 import { Plus, Plane, BedDouble, MapPin, ExternalLink, Trash2, CalendarDays, Clock, MessageCircle, Pencil } from "lucide-react";
 import clsx from "clsx";
+import { LinkedMemories } from "../memories/Memories";
 import { useTrip } from "../TripProvider";
 import { ModuleTitle } from "../ModuleTitle";
 import { Modal } from "../ui/Modal";
@@ -591,6 +592,7 @@ function PlanDetails({ item }: { item: ItineraryItem }) {
         </div>
       )}
       {item.notes && <div className="detail-section"><h3>Notes</h3><p className="detail-notes small">{item.notes}</p></div>}
+      <LinkedMemories type="itinerary" id={item.id} />
       <PaymentPanel type="itinerary" id={item.id} category="activities" />
       <div className="detail-section">
         <h3 className="row" style={{ gap: 6 }}><Clock size={13} /> Comments</h3>

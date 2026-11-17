@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { Plane, Plus, Trash2, Copy, Pencil, Check, MapPin } from "lucide-react";
+import { LinkedMemories } from "../memories/Memories";
 import { useTrip } from "../TripProvider";
 import { ModuleTitle } from "../ModuleTitle";
 import { Modal } from "../ui/Modal";
@@ -353,6 +354,7 @@ function FlightDetails({ flight: f }: { flight: Flight }) {
         <button className="btn btn-primary" style={{ alignSelf: "flex-start" }} onClick={() => void book(f, others)}><Check size={15} /> Book this one</button>
       )}
       {f.notes && <div className="detail-section"><h3>Notes</h3><p className="detail-notes small">{f.notes}</p></div>}
+      <LinkedMemories type="flight" id={f.id} />
       {f.status === "booked" && <PaymentPanel type="flight" id={f.id} category="flights" />}
       <div className="detail-section">
         <h3>Comments</h3>

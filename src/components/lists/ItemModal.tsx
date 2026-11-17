@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { Trash2, ArrowUpRight, Link2, Pencil } from "lucide-react";
+import { LinkedMemories } from "../memories/Memories";
 import { useTrip } from "../TripProvider";
 import { Modal } from "../ui/Modal";
 import { CommentThread } from "../sections/Comments";
@@ -235,6 +236,7 @@ function ItemDetails({ list, item, total, income, onNavigate }: { list: ListDef;
         ))}
       </div>
       {empty > 0 && <p className="tiny muted">{empty} empty field{empty === 1 ? "" : "s"} hidden. Tap Edit to fill {empty === 1 ? "it" : "them"} in.</p>}
+      <LinkedMemories type="list_item" id={item.id} />
       {total != null && <PaymentPanel type="list_item" id={item.id} category="other" />}
       {income != null && <PaymentPanel type="list_item" id={item.id} category="other" income />}
       <div className="detail-section">

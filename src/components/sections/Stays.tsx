@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { BedDouble, Plus, Trash2, MapPin, Phone, ExternalLink, Copy, Moon, Pencil, Check, Plane, Sparkles, Map as MapIcon } from "lucide-react";
+import { LinkedMemories } from "../memories/Memories";
 import { useTrip } from "../TripProvider";
 import { ModuleTitle } from "../ModuleTitle";
 import { Modal } from "../ui/Modal";
@@ -356,6 +357,7 @@ function StayDetails({ stay: s }: { stay: Stay }) {
         </div>
       )}
       {s.notes && <div className="detail-section"><h3>Notes</h3><p className="detail-notes small">{s.notes}</p></div>}
+      <LinkedMemories type="stay" id={s.id} />
       {s.status === "booked" && <PaymentPanel type="stay" id={s.id} category="lodging" />}
       <div className="detail-section">
         <h3>Comments</h3>

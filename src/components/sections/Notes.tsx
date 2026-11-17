@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Plus, Pin, Lock, Trash2, NotebookPen, BookOpen, Users } from "lucide-react";
 import clsx from "clsx";
@@ -9,6 +9,9 @@ import { useTrip } from "../TripProvider";
 import { ModuleTitle } from "../ModuleTitle";
 import { AutoTextarea, Avatar, EmptyState, Segmented } from "../ui/Fields";
 import { formatDayLong, todayString } from "@/lib/format";
+import { AttachPicker, AttachedChip, VisibilityControl } from "../memories/Memories";
+import { visibilityLabel } from "@/lib/memories";
+import { Field } from "../ui/Fields";
 import type { Note } from "@/lib/types";
 
 type Tab = "shared" | "private" | "journal";
@@ -17,12 +20,27 @@ export function NotesSection({ compact = false }: { compact?: boolean }) {
   const { rows, me, canEdit, insert, tripId } = useTrip();
   const [tab, setTab] = useState<Tab>("shared");
   const [openId, setOpenId] = useState<string | null>(null);
+  // Opened from a plan or stay ("Photos & notes").
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get("note");
+    if (!id) return;
+    queueMicrotask(() => {
+      const n = rows.notes.find((x) => x.id === id);
+      if (n) {
+        setTab(n.kind === "journal" ? "journal" : n.visibility === "private" ? "private" : "shared");
+        setOpenId(id);
+      }
+    });
+    // Only on first load.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows.notes.length > 0]);
 
   const lists = useMemo(() => {
     const sort = (l: Note[]) => [...l].sort((a, b) => Number(b.pinned) - Number(a.pinned) || b.updated_at.localeCompare(a.updated_at));
     return {
-      shared: sort(rows.notes.filter((n) => n.kind === "note" && !n.is_private)),
-      private: sort(rows.notes.filter((n) => n.kind === "note" && n.is_private && n.created_by === me)),
+      // Shared: with everyone, or with a chosen few that includes you.
+      shared: sort(rows.notes.filter((n) => n.kind === "note" && (n.visibility ?? (n.is_private ? "private" : "everyone")) !== "private")),
+      private: sort(rows.notes.filter((n) => n.kind === "note" && (n.visibility ?? (n.is_private ? "private" : "everyone")) === "private" && n.created_by === me)),
       journal: [...rows.notes.filter((n) => n.kind === "journal")].sort((a, b) => (b.entry_date ?? "").localeCompare(a.entry_date ?? "") || b.created_at.localeCompare(a.created_at)),
     };
   }, [rows.notes, me]);
@@ -35,7 +53,7 @@ export function NotesSection({ compact = false }: { compact?: boolean }) {
     const n = await insert("notes", {
       title: isJournal ? "" : "Untitled note",
       kind: isJournal ? "journal" : "note",
-      is_private: tab === "private" || (isJournal && !canEdit),
+      visibility: tab === "private" || (isJournal && !canEdit) ? "private" : "everyone",
       entry_date: isJournal ? todayString() : null,
       created_by: me,
     });
@@ -108,7 +126,7 @@ function NoteListItem({ note, active, onClick }: { note: Note; active: boolean; 
       <span className="row tiny muted" style={{ marginTop: 4 }}>
         <Avatar name={nameOf(note.created_by)} color={colorOf(note.created_by)} size={16} />
         {formatDistanceToNow(new Date(note.updated_at), { addSuffix: true })}
-        {note.is_private && <Lock size={11} />}
+        {note.visibility === "private" ? <Lock size={11} /> : note.visibility === "people" ? <Users size={11} /> : null}
       </span>
     </button>
   );
@@ -116,7 +134,7 @@ function NoteListItem({ note, active, onClick }: { note: Note; active: boolean; 
 
 function NoteEditor({ note, onDeleted }: { note: Note; onDeleted: () => void }) {
   const { update, remove, canEdit, me, nameOf } = useTrip();
-  const editable = note.is_private ? note.created_by === me : canEdit;
+  const editable = note.created_by === me || (canEdit && note.visibility !== "private");
   const [title, setTitle] = useState(note.title);
   return (
     <div className="card stack">
@@ -148,8 +166,25 @@ function NoteEditor({ note, onDeleted }: { note: Note; onDeleted: () => void }) 
         className="journal-body"
         placeholder={note.kind === "journal" ? "What happened today? What did it smell like, taste like, feel like?" : "Start typing. It saves automatically."}
       />
+      <div className="note-meta">
+        <Field label="Who can see it">
+          <VisibilityControl
+            value={note.visibility ?? (note.is_private ? "private" : "everyone")}
+            people={note.visible_to ?? []}
+            owner={note.created_by}
+            onChange={(v) => update("notes", note.id, v)}
+          />
+        </Field>
+        <Field label="Attached to" hint="Shows with that plan, stay or flight, and in its scrapbook chapter.">
+          {editable ? (
+            <AttachPicker type={note.linked_type} id={note.linked_id} onChange={(t, id) => update("notes", note.id, { linked_type: t, linked_id: id })} />
+          ) : (
+            <AttachedChip type={note.linked_type} id={note.linked_id} />
+          )}
+        </Field>
+      </div>
       <span className="tiny muted">
-        {note.is_private ? "🔒 Only you can see this." : `Shared with everyone on the trip · by ${nameOf(note.created_by)}`} · Saves automatically
+        {visibilityLabel({ visibility: note.visibility ?? (note.is_private ? "private" : "everyone"), visible_to: note.visible_to, created_by: note.created_by }, (id) => nameOf(id), me)} · by {nameOf(note.created_by)} · Saves automatically
       </span>
     </div>
   );
