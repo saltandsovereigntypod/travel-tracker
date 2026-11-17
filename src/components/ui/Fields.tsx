@@ -243,12 +243,14 @@ export function AutoTextarea({
 }) {
   const [text, setText] = useState(value);
   const [dirty, setDirty] = useState(false);
+  const [lastValue, setLastValue] = useState(value);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Take outside updates (from collaborators) when not mid-edit.
-  useEffect(() => {
+  if (value !== lastValue) {
+    setLastValue(value);
     if (!dirty) setText(value);
-  }, [value, dirty]);
+  }
 
   return (
     <textarea

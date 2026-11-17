@@ -1,2 +1,7 @@
 "use client";
-export default function Placeholder() { return <p>My view</p>; }
+
+import { MyView } from "@/components/view/MyView";
+
+export default function TripHome() {
+  return <MyView />;
+}

@@ -32,7 +32,7 @@ export function useBudgetNumbers() {
 }
 
 export function BudgetSection({ compact = false }: { compact?: boolean }) {
-  const { rows, trip, canEdit, updateTrip, nameOf, colorOf, insert, me, tripId } = useTrip();
+  const { rows, canEdit, updateTrip, nameOf, colorOf, insert, me, tripId } = useTrip();
   const { cur, spent, planned, budget, remaining } = useBudgetNumbers();
   const [editing, setEditing] = useState<Expense | "new" | null>(null);
   const [editBudget, setEditBudget] = useState(false);
@@ -274,7 +274,7 @@ function ExpenseModal({ expense, onClose }: { expense: Expense | "new" | null; o
   useEffect(() => {
     if (!expense || form.currency === cur || !form.amount) return;
     let cancelled = false;
-    setRateBusy(true);
+    queueMicrotask(() => !cancelled && setRateBusy(true));
     exchangeRate(form.currency, cur).then((rate) => {
       if (cancelled) return;
       setRateBusy(false);

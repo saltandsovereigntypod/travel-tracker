@@ -198,6 +198,21 @@ export function TripProvider({ tripId, children }: { tripId: string; children: R
     return () => clearTimeout(id);
   }, [trip, rows, profiles, view, loading, offline, snapshotKey]);
 
+  // Presence ("who's here, on which page"). Supabase rate-limits presence updates and
+  // closes the channel if we send too many, so only send real changes, at most ~1/sec.
+  const presenceInfo = useRef({ name: "", color: "" });
+  const lastPresence = useRef("");
+  const presenceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const trackPresence = useCallback(() => {
+    if (presenceTimer.current) clearTimeout(presenceTimer.current);
+    presenceTimer.current = setTimeout(() => {
+      const payload = { user_id: me, ...presenceInfo.current, page: presencePage.current };
+      const key = JSON.stringify(payload);
+      if (key === lastPresence.current || !channelRef.current) return;
+      lastPresence.current = key;
+      void channelRef.current.track(payload);
+    }, 1000);
+  }, [me]);
   // ---------------------------------------------------------------- realtime
   useEffect(() => {
     if (!me || !tripId) return;
@@ -231,19 +246,29 @@ export function TripProvider({ tripId, children }: { tripId: string; children: R
         .filter(Boolean) as PresenceUser[];
       setOnline(list);
     });
-    channel.subscribe((status) => {
-      if (status === "SUBSCRIBED") {
-        if (subscribedOnce) void load(); // catch up on anything missed while disconnected
-        subscribedOnce = true;
-        void channel.track({ user_id: me, name: "", color: "", page: presencePage.current });
-      }
+    let cancelled = false;
+    // Attach the signed-in token before joining; otherwise the database sees an
+    // anonymous listener and row-level security filters out every change.
+    sb.auth.getSession().then(async ({ data }) => {
+      if (cancelled) return;
+      if (data.session) await sb.realtime.setAuth(data.session.access_token);
+      if (cancelled) return;
+      channel.subscribe((status) => {
+        if (status === "SUBSCRIBED") {
+          if (subscribedOnce) void load(); // catch up on anything missed while disconnected
+          subscribedOnce = true;
+          lastPresence.current = "";
+          trackPresence();
+        }
+      });
     });
     channelRef.current = channel;
     return () => {
+      cancelled = true;
       channelRef.current = null;
       void sb.removeChannel(channel);
     };
-  }, [me, tripId, load]);
+  }, [me, tripId, load, trackPresence]);
 
   // New members joined -> fetch their profiles.
   useEffect(() => {
@@ -287,14 +312,18 @@ export function TripProvider({ tripId, children }: { tripId: string; children: R
     [members],
   );
 
+  const myName = nameOf(me);
+  const myColor = colorOf(me);
+  useEffect(() => {
+    presenceInfo.current = { name: myName, color: myColor };
+    trackPresence();
+  }, [myName, myColor, trackPresence]);
   const setPresencePage = useCallback(
     (page: string) => {
       presencePage.current = page;
-      const name = nameOf(me);
-      const color = colorOf(me);
-      void channelRef.current?.track({ user_id: me, name, color, page });
+      trackPresence();
     },
-    [me, nameOf, colorOf],
+    [trackPresence],
   );
 
   const insert = useCallback(

@@ -72,6 +72,7 @@ export function MapSection({ compact = false, height }: { compact?: boolean; hei
     let cancelled = false;
     (async () => {
       const maplibre = await import("maplibre-gl");
+      maplibre.setWorkerUrl("/vendor/maplibre-gl-worker.mjs");
       if (cancelled || !box.current || map.current) return;
       const center: [number, number] = trip?.lng != null && trip?.lat != null ? [trip.lng, trip.lat] : [-98.5, 39.8];
       const m = new maplibre.Map({ container: box.current, style: STYLE, center, zoom: trip?.lat != null ? 12 : 3, attributionControl: { compact: true } });

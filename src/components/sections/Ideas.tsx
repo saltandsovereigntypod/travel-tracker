@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { ThumbsUp, ThumbsDown, MessageCircle, Plus, ExternalLink, CalendarPlus, Pencil, MapPin, Lightbulb, Trash2 } from "lucide-react";
+import { ThumbsUp, ThumbsDown, MessageCircle, Plus, ExternalLink, CalendarPlus, MapPin, Lightbulb, Trash2 } from "lucide-react";
 import clsx from "clsx";
 import { useTrip } from "../TripProvider";
 import { Modal } from "../ui/Modal";
