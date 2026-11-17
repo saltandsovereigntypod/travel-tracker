@@ -28,18 +28,22 @@ const UNSCHEDULED = "unscheduled";
 
 export { itemsForDay, orderForTime } from "./itinerary-order";
 import { itemsForDay, orderForTime } from "./itinerary-order";
+import { calendarEntries } from "@/lib/fields";
 
 interface FixedEvent {
   key: string;
-  kind: "flight" | "stay";
+  kind: "flight" | "stay" | "list";
   time: string | null;
   title: string;
   sub: string;
+  /** For list items: where tapping goes. */
+  href?: string;
+  icon?: string;
 }
 
 /** Flights and stay check-ins/outs that land on each day. */
 export function useFixedEvents() {
-  const { rows } = useTrip();
+  const { rows, tripId } = useTrip();
   return useMemo(() => {
     const byDay: Record<string, FixedEvent[]> = {};
     const add = (day: string | null, e: FixedEvent) => {
@@ -59,9 +63,21 @@ export function useFixedEvents() {
       add(s.check_in, { key: `s-${s.id}-in`, kind: "stay", time: s.check_in_time, title: `Check in: ${s.name}`, sub: s.status === "idea" ? "Not booked yet" : "Stay" });
       add(s.check_out, { key: `s-${s.id}-out`, kind: "stay", time: s.check_out_time, title: `Check out: ${s.name}`, sub: "Stay" });
     }
+    // Dates from any custom list (deposit due, recording, bill due…) show up too.
+    for (const c of calendarEntries({ lists: rows.lists, items: rows.list_items })) {
+      add(c.day, {
+        key: `l-${c.item.id}-${c.field.id}`,
+        kind: "list",
+        time: c.time,
+        title: c.item.title || "Untitled",
+        sub: `${c.list.name} · ${c.field.name}`,
+        href: `/trips/${tripId}/lists/${c.list.id}?item=${c.item.id}`,
+        icon: c.list.icon,
+      });
+    }
     Object.values(byDay).forEach((l) => l.sort((a, b) => (a.time ?? "99").localeCompare(b.time ?? "99")));
     return byDay;
-  }, [rows.flights, rows.stays]);
+  }, [rows.flights, rows.stays, rows.lists, rows.list_items, tripId]);
 }
 
 export function ItinerarySection({ compact = false }: { compact?: boolean }) {
@@ -81,7 +97,8 @@ export function ItinerarySection({ compact = false }: { compact?: boolean }) {
   );
 
   const days = tripDays(trip?.start_date ?? null, trip?.end_date ?? null);
-  const outside = [...new Set(rows.itinerary_items.map((i) => i.day).filter((d): d is string => !!d && !days.includes(d)))].sort();
+  // Days outside the space's range that still have something on them (plans, flights, list dates…).
+  const outside = [...new Set([...rows.itinerary_items.map((i) => i.day), ...Object.keys(fixed)].filter((d): d is string => !!d && !days.includes(d)))].sort();
   // Trip-style spaces show every day in their range; any other dated plans slot in chronologically.
   const allDays = [...days, ...outside].sort();
   const unscheduled = itemsForDay(rows.itinerary_items, null);
@@ -285,16 +302,7 @@ function DayColumn({
       <div ref={setNodeRef} className={clsx("day-drop", isOver && "over")}>
         {merged.map((m) =>
           "fixed" in m ? (
-            <div key={m.fixed.key} className="itin-item itin-fixed">
-              <span className="itin-time">{formatTime(m.fixed.time) || "—"}</span>
-              <span className="cat-dot" style={{ background: "var(--surface)" }}>
-                {m.fixed.kind === "flight" ? <Plane size={15} /> : <BedDouble size={15} />}
-              </span>
-              <div className="grow">
-                <strong className="small">{m.fixed.title}</strong>
-                <div className="tiny muted">{m.fixed.sub}</div>
-              </div>
-            </div>
+            <FixedRow key={m.fixed.key} e={m.fixed} />
           ) : (
             <ItemRow key={m.item.id} item={m.item} onOpen={() => onOpen(m.item)} draggable={canEdit} />
           ),
@@ -566,4 +574,24 @@ function TrayIdea({ idea, up, onTap }: { idea: Idea; up: number; onTap: () => vo
 function parseMonth(day: string) {
   const [y, m] = day.split("-").map(Number);
   return new Date(Date.UTC(y, m - 1, 1)).toLocaleDateString("en-US", { month: "long", year: "numeric", timeZone: "UTC" });
+}
+
+function FixedRow({ e }: { e: FixedEvent }) {
+  const inner = (
+    <>
+      <span className="itin-time">{formatTime(e.time) || "—"}</span>
+      <span className="cat-dot" style={{ background: "var(--surface)" }}>
+        {e.kind === "flight" ? <Plane size={15} /> : e.kind === "stay" ? <BedDouble size={15} /> : <span aria-hidden>{e.icon}</span>}
+      </span>
+      <div className="grow">
+        <strong className="small">{e.title}</strong>
+        <div className="tiny muted">{e.sub}</div>
+      </div>
+    </>
+  );
+  return e.href ? (
+    <Link href={e.href} className="itin-item itin-fixed" style={{ cursor: "pointer", textDecoration: "none", color: "inherit" }}>{inner}</Link>
+  ) : (
+    <div className="itin-item itin-fixed">{inner}</div>
+  );
 }

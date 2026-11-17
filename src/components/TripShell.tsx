@@ -12,6 +12,8 @@ import { TopBar } from "./AppChrome";
 import { useTrip } from "./TripProvider";
 import { Avatar } from "./ui/Fields";
 import { Modal } from "./ui/Modal";
+import { NewListModal } from "./lists/NewListModal";
+import { Plus } from "lucide-react";
 import { fontHref, readableOn, themeVars } from "@/lib/themes";
 
 export const MODULE_ICONS: Record<string, typeof Home> = {
@@ -51,14 +53,17 @@ export function useSpaceNav(): NavItem[] {
 
 
 export function TripShell({ children }: { children: React.ReactNode }) {
-  const { trip, loading, error, offline, view, online, me, tripId, setPresencePage, nameOf, colorOf, noun } = useTrip();
+  const { trip, loading, error, offline, view, online, me, tripId, setPresencePage, nameOf, colorOf, noun, rows, canEdit } = useTrip();
   const NAV = useSpaceNav();
   // Phone bottom bar: home plus the first three modules (skipping Today, which lives on Home).
   const MOBILE_MAIN = ["", ...NAV.filter((n) => n.slug && n.slug !== "today" && n.slug !== "people" && n.slug !== "settings").slice(0, 3).map((n) => n.slug)];
   const pathname = usePathname();
   const base = `/trips/${tripId}`;
-  const current = pathname.replace(base, "").replace(/^\//, "").split("/")[0];
+  const parts = pathname.replace(base, "").replace(/^\//, "").split("/");
+  const current = parts[0];
+  const currentList = current === "lists" ? parts[1] : null;
   const [moreOpen, setMoreOpen] = useState(false);
+  const [newList, setNewList] = useState(false);
   const theme = view.theme as Required<typeof view.theme>;
 
   useEffect(() => {
@@ -142,7 +147,23 @@ export function TripShell({ children }: { children: React.ReactNode }) {
             const here = others.filter((p) => (p.page === "home" ? "" : p.page) === n.slug);
             return (
               <div key={n.slug}>
-                {i === NAV.length - 2 && <div className="nav-label">{noun}</div>}
+                {i === NAV.length - 2 && (
+                  <>
+                    <div className="nav-label">Lists</div>
+                    {rows.lists.map((l) => (
+                      <Link key={l.id} href={`${base}/lists/${l.id}`} className={clsx(currentList === l.id && "active")}>
+                        <span aria-hidden style={{ width: 18, textAlign: "center" }}>{l.icon}</span>
+                        <span className="truncate">{l.name}</span>
+                      </Link>
+                    ))}
+                    {canEdit && (
+                      <button className="nav-add" onClick={() => setNewList(true)}>
+                        <Plus size={16} /> New list
+                      </button>
+                    )}
+                    <div className="nav-label">{noun}</div>
+                  </>
+                )}
                 <Link href={n.slug ? `${base}/${n.slug}` : base} className={clsx(current === n.slug && "active")}>
                   <n.icon size={18} />
                   {n.label}
@@ -181,7 +202,27 @@ export function TripShell({ children }: { children: React.ReactNode }) {
             </Link>
           ))}
         </div>
+        {(rows.lists.length > 0 || canEdit) && (
+          <>
+            <div className="nav-label" style={{ padding: "1rem 0 0.4rem" }}>Lists</div>
+            <div className="more-sheet">
+              {rows.lists.map((l) => (
+                <Link key={l.id} href={`${base}/lists/${l.id}`} onClick={() => setMoreOpen(false)}>
+                  <span style={{ fontSize: 22 }} aria-hidden>{l.icon}</span>
+                  {l.name}
+                </Link>
+              ))}
+              {canEdit && (
+                <button className="more-add" onClick={() => { setMoreOpen(false); setNewList(true); }}>
+                  <Plus size={22} />
+                  New list
+                </button>
+              )}
+            </div>
+          </>
+        )}
       </Modal>
+      <NewListModal open={newList} onClose={() => setNewList(false)} />
     </div>
   );
 }

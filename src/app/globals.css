@@ -685,3 +685,37 @@ input[type="checkbox"] { accent-color: var(--accent); width: 18px; height: 18px;
   .trip-cover { height: 112px; }
   .space-icon { width: 44px; height: 44px; font-size: 1.4rem; bottom: -0.9rem; }
 }
+
+/* Lists */
+.opt-chip { display: inline-flex; align-items: center; padding: 0.12rem 0.55rem; border-radius: 999px; font-size: 0.76rem; font-weight: 600; white-space: nowrap; }
+.opt-btn { display: inline-flex; align-items: center; gap: 0.25rem; padding: 0.3rem 0.7rem; border-radius: 999px; border: 1px solid color-mix(in srgb, var(--c) 45%, var(--border)); background: var(--surface); color: var(--ink); font: 600 0.8rem var(--font-body); cursor: pointer; min-height: 32px; }
+.opt-btn.on { background: color-mix(in srgb, var(--c) 28%, var(--surface)); border-color: var(--c); }
+.opt-btn:disabled { cursor: default; }
+.link-chip { display: inline-flex; align-items: center; gap: 0.25rem; padding: 0.15rem 0.55rem; border-radius: 8px; background: var(--soft2); color: color-mix(in srgb, var(--accent2) 80%, var(--ink)); font-size: 0.78rem; font-weight: 600; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.link-chip button { border: 0; background: none; color: inherit; cursor: pointer; padding: 0; display: inline-grid; }
+.link-search { border: 1px solid var(--border); border-radius: 12px; padding: 0.5rem; display: flex; flex-direction: column; gap: 0.4rem; background: var(--surface); }
+.list-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 0.88rem; }
+.list-table th { text-align: left; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); font-weight: 700; padding: 0.55rem 0.6rem; border-bottom: 1px solid var(--line); white-space: nowrap; position: sticky; top: 0; background: var(--surface); }
+.list-table td { padding: 0.55rem 0.6rem; border-bottom: 1px solid var(--line); max-width: 260px; overflow: hidden; vertical-align: middle; }
+.list-table tr.item-row { cursor: pointer; }
+.list-table tr.item-row:hover td { background: var(--soft); }
+.list-table td.title-cell { font-weight: 600; min-width: 180px; }
+.table-wrap { overflow-x: auto; border-radius: var(--radius); }
+.item-cards { display: grid; gap: 0.6rem; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+.item-card { cursor: pointer; display: flex; flex-direction: column; gap: 0.45rem; text-align: left; }
+.item-card .meta { display: flex; flex-wrap: wrap; gap: 0.35rem 0.6rem; font-size: 0.82rem; color: var(--muted); align-items: center; }
+.feeds-row { display: flex; flex-wrap: wrap; gap: 0.35rem; align-items: center; }
+.feed-chip { font-size: 0.72rem; font-weight: 700; padding: 0.12rem 0.5rem; border-radius: 999px; background: var(--soft2); color: color-mix(in srgb, var(--accent2) 80%, var(--ink)); }
+.field-row { display: grid; grid-template-columns: 160px minmax(0, 1fr); gap: 0.6rem; align-items: start; padding: 0.4rem 0; border-bottom: 1px dashed var(--line); }
+.field-row > .field-name { font-size: 0.82rem; font-weight: 600; color: var(--muted); padding-top: 0.55rem; display: flex; gap: 0.35rem; align-items: center; }
+.field-row .cost-editor .field-label { display: none; }
+@media (max-width: 720px) {
+  .field-row { grid-template-columns: 1fr; gap: 0.25rem; }
+  .field-row > .field-name { padding-top: 0.2rem; }
+  .item-cards { grid-template-columns: 1fr; }
+}
+.field-edit { border: 1px solid var(--border); border-radius: 12px; padding: 0.7rem; display: flex; flex-direction: column; gap: 0.5rem; background: var(--surface); }
+.nav-sub { padding-left: 0.4rem; }
+.nav-add { display: flex; align-items: center; gap: 0.65rem; padding: 0.5rem 0.7rem; border-radius: 10px; border: 0; background: none; color: var(--muted); font: 600 0.88rem var(--font-body); cursor: pointer; width: 100%; text-align: left; }
+.nav-add:hover { background: var(--line); color: var(--accent); }
+.more-add { display: flex; flex-direction: column; align-items: center; gap: 0.35rem; padding: 0.9rem 0.3rem; border-radius: 14px; background: none; border: 2px dashed var(--border); font: 600 0.85rem var(--font-body); color: var(--muted); cursor: pointer; }

@@ -13,13 +13,15 @@ import type {
   Comment, Expense, Flight, Idea, Invite, ItineraryItem, Member, Note, PackingItem, Photo,
   Profile, Stay, Trip, TripView, Vote, Household, HouseholdMember,
 } from "@/lib/types";
+import type { ListDef, ListItem } from "@/lib/fields";
 import { resolveTheme } from "@/lib/themes";
 import { defaultPageLayout, pageToBoard } from "@/lib/blocks";
 import { resolveModules, templateFor, type ResolvedModule, type SpaceTemplate } from "@/lib/spaces";
 
 export type TableName =
   | "ideas" | "idea_votes" | "itinerary_items" | "flights" | "stays" | "expenses"
-  | "packing_items" | "notes" | "photos" | "comments" | "trip_members" | "trip_invites";
+  | "packing_items" | "notes" | "photos" | "comments" | "trip_members" | "trip_invites"
+  | "lists" | "list_items";
 
 interface Rows {
   ideas: Idea[];
@@ -34,6 +36,8 @@ interface Rows {
   comments: Comment[];
   trip_members: Member[];
   trip_invites: Invite[];
+  lists: ListDef[];
+  list_items: ListItem[];
 }
 
 type RowOf<T extends TableName> = Rows[T][number];
@@ -41,12 +45,14 @@ type RowOf<T extends TableName> = Rows[T][number];
 const TABLES: TableName[] = [
   "ideas", "idea_votes", "itinerary_items", "flights", "stays", "expenses",
   "packing_items", "notes", "photos", "comments", "trip_members", "trip_invites",
+  "lists", "list_items",
 ];
 const LIVE_TABLES = TABLES.filter((t) => t !== "trip_invites");
 
 const emptyRows = (): Rows => ({
   ideas: [], idea_votes: [], itinerary_items: [], flights: [], stays: [], expenses: [],
   packing_items: [], notes: [], photos: [], comments: [], trip_members: [], trip_invites: [],
+  lists: [], list_items: [],
 });
 
 function keyOf(table: TableName, row: Record<string, unknown>): string {
@@ -199,7 +205,7 @@ export function TripProvider({ tripId, children }: { tripId: string; children: R
     const results = await Promise.all(
       TABLES.map((t) => {
         let q = sb.from(t).select("*").eq("trip_id", tripId);
-        if (t === "itinerary_items" || t === "packing_items") q = q.order("sort_order");
+        if (t === "itinerary_items" || t === "packing_items" || t === "lists" || t === "list_items") q = q.order("sort_order");
         else if (t === "trip_members") q = q.order("joined_at");
         else q = q.order("created_at");
         return q;

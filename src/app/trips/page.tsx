@@ -15,6 +15,7 @@ import { friendlyError, supabase } from "@/lib/supabase";
 import { countdown, formatRange } from "@/lib/format";
 import { CURRENCIES, searchPlaces } from "@/lib/services";
 import { TEMPLATES, templateFor, type SpaceTemplate } from "@/lib/spaces";
+import { LIST_TEMPLATES, SPACE_LISTS, buildLists } from "@/lib/list-templates";
 import type { Member, Trip } from "@/lib/types";
 
 type SpaceWithRole = Trip & { role: Member["role"]; attendance: Member["attendance"] };
@@ -191,6 +192,12 @@ function NewSpaceModal({ open, onClose }: { open: boolean; onClose: () => void }
       toast.error(friendlyError(error));
       return;
     }
+    // Starter lists for this kind of space (linked to each other where it makes sense).
+    const starter = SPACE_LISTS[tpl.kind] ?? [];
+    if (starter.length) {
+      const { error: listErr } = await sb.from("lists").insert(buildLists(starter, id as string));
+      if (listErr) toast.error(`Created, but the starter lists failed: ${friendlyError(listErr)}`);
+    }
     if (destination.trim()) {
       searchPlaces(destination)
         .then((r) => r[0] && sb.from("trips").update({ lat: r[0].lat, lng: r[0].lng }).eq("id", id))
@@ -268,7 +275,9 @@ function NewSpaceModal({ open, onClose }: { open: boolean; onClose: () => void }
             </select>
           </Field>
           <p className="field-full small muted">
-            Comes with: {tpl.modules.map((m) => m.label ?? m.id).map((l) => l.charAt(0).toUpperCase() + l.slice(1)).join(" · ")}. You can switch features on or off and rename them anytime in Settings.
+            Comes with: {tpl.modules.map((m) => m.label ?? m.id).map((l) => l.charAt(0).toUpperCase() + l.slice(1)).join(" · ")}
+            {(SPACE_LISTS[tpl.kind] ?? []).length > 0 && <>, plus lists for {(SPACE_LISTS[tpl.kind] ?? []).map((k) => LIST_TEMPLATES.find((t) => t.key === k)?.name).join(", ")}</>}
+            . Switch features on or off, rename them, and add more lists anytime.
           </p>
         </form>
       )}

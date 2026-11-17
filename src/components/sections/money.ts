@@ -8,6 +8,7 @@ import { useTrip } from "../TripProvider";
 import { costTotal, participantsOf, pickCost } from "@/lib/costs";
 import { daysBetween } from "@/lib/format";
 import type { Expense, Flight, Idea, ItineraryItem, LinkedType, Stay } from "@/lib/types";
+import { asDate, itemMoneyTotal, itemParticipants } from "@/lib/fields";
 
 export function homeAmount(e: Expense, tripCurrency: string): number {
   if (e.currency === tripCurrency) return Number(e.amount);
@@ -79,7 +80,18 @@ export function useMoney() {
         return build("stay", s.id, s.name, s.check_in, participants, costTotal(s.cost, pickCost(s), { ...ctxBase, participants, nights: stayNights(s) }));
       });
 
-    const committed = [...items, ...flights, ...stays];
+    // Custom list items with money fields (vendors, bills, costumes…).
+    const listThings = rows.list_items.flatMap((it) => {
+      const list = rows.lists.find((l) => l.id === it.list_id);
+      if (!list) return [];
+      const total = itemMoneyTotal(it, list, { going: goingIds, householdOf });
+      if (total == null) return [];
+      const dateField = list.fields.find((f) => f.type === "date" || f.type === "datetime");
+      const day = dateField ? asDate(dateField, it.values[dateField.id])?.date ?? null : null;
+      return [build("list_item", it.id, `${list.icon} ${it.title || "Untitled"}`, day, itemParticipants(it, list, goingIds), total)];
+    });
+
+    const committed = [...items, ...flights, ...stays, ...listThings];
     const committedTotal = committed.reduce((n, c) => n + (c.total ?? 0), 0);
     const stillToPay = committed.reduce((n, c) => n + c.remaining, 0);
     const spent = rows.expenses.filter((e) => e.category !== "settlement").reduce((n, e) => n + homeAmount(e, cur), 0);
@@ -99,7 +111,7 @@ export function useMoney() {
       budget,
       remainingBudget: budget - (spent + stillToPay),
     };
-  }, [rows.itinerary_items, rows.flights, rows.stays, rows.expenses, rows.ideas, goingIds, householdOf, cur, trip?.budget]);
+  }, [rows.itinerary_items, rows.flights, rows.stays, rows.expenses, rows.ideas, rows.lists, rows.list_items, goingIds, householdOf, cur, trip?.budget]);
 }
 
 export function ideaTotal(i: Idea, going: string[], householdOf: (id: string) => string | null) {

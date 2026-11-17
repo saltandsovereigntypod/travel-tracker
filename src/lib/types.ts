@@ -22,7 +22,7 @@ export interface CostFields {
 }
 
 export type SplitMode = "equal" | "shares" | "exact";
-export type LinkedType = "itinerary" | "flight" | "stay";
+export type LinkedType = "itinerary" | "flight" | "stay" | "list_item";
 
 export interface Household {
   id: string;
@@ -244,7 +244,7 @@ export interface Photo {
   created_at: string;
 }
 
-export type CommentEntity = "idea" | "itinerary" | "flight" | "stay" | "expense" | "note" | "photo";
+export type CommentEntity = "idea" | "itinerary" | "flight" | "stay" | "expense" | "note" | "photo" | "list_item";
 
 export interface Comment {
   id: string;

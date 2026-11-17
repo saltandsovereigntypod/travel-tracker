@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Plane, BedDouble, MapPin, Sun, Lightbulb } from "lucide-react";
 import { useTrip } from "../TripProvider";
 import { categoryOf } from "@/lib/categories";
+import { assignedTo, calendarEntries, isDone } from "@/lib/fields";
 import { addDays, countdown, formatDayLong, formatTime, todayString, tripDays } from "@/lib/format";
 import { mapsLink } from "@/lib/services";
 import { itemsForDay, useFixedEvents } from "./Itinerary";
@@ -27,7 +28,11 @@ export function Countdown({ big = false }: { big?: boolean }) {
 
 /** What's happening today during the trip, or what's coming up before it. */
 export function TodaySection({ compact = false }: { compact?: boolean }) {
-  const { trip, rows, tripId, noun, hasModule } = useTrip();
+  const { trip, rows, tripId, noun, hasModule, me } = useTrip();
+  const engine = { lists: rows.lists, items: rows.list_items };
+  const mine = assignedTo(me, engine).slice(0, 6);
+  const horizon = addDays(todayString(), 14);
+  const dueSoon = calendarEntries(engine).filter((c) => c.day >= todayString() && c.day <= horizon && !isDone(c.item, c.list)).slice(0, 6);
   const fixed = useFixedEvents();
   const scores = useIdeaScores();
   const today = todayString();
@@ -70,7 +75,7 @@ export function TodaySection({ compact = false }: { compact?: boolean }) {
             {events.map((e) => (
               <div key={e.key} className="itin-item itin-fixed">
                 <span className="itin-time">{formatTime(e.time) || "—"}</span>
-                {e.kind === "flight" ? <Plane size={16} /> : <BedDouble size={16} />}
+                {e.kind === "flight" ? <Plane size={16} /> : e.kind === "stay" ? <BedDouble size={16} /> : <span aria-hidden>{e.icon}</span>}
                 <strong className="small grow">{e.title}</strong>
               </div>
             ))}
@@ -112,6 +117,37 @@ export function TodaySection({ compact = false }: { compact?: boolean }) {
           {unscheduled > 0 && <p className="small">{unscheduled} plan{unscheduled === 1 ? "" : "s"} waiting for a day.</p>}
           {!unbooked.length && !topIdeas.length && !unscheduled && <p className="small muted">All caught up. 🎉</p>}
           {hasModule("itinerary") && <Link href={`/trips/${tripId}/itinerary`} className="btn btn-sm btn-ghost" style={{ alignSelf: "flex-start" }}>Open calendar →</Link>}
+        </div>
+      )}
+      {(mine.length > 0 || dueSoon.length > 0) && (
+        <div className={compact ? "stack" : "card stack"} style={{ gap: "0.8rem" }}>
+          {dueSoon.length > 0 && (
+            <div>
+              <strong className="small">Coming up in the next 2 weeks</strong>
+              <div className="stack" style={{ gap: 2, marginTop: 4 }}>
+                {dueSoon.map((c) => (
+                  <Link key={`${c.item.id}${c.field.id}`} href={`/trips/${tripId}/lists/${c.list.id}?item=${c.item.id}`} className="check-row" style={{ textDecoration: "none" }}>
+                    <span aria-hidden>{c.list.icon}</span>
+                    <span className="grow small"><strong>{c.item.title || "Untitled"}</strong> <span className="muted">· {c.field.name}</span></span>
+                    <span className="tiny muted nowrap">{formatDayLong(c.day).replace(/^\w+, /, "")}</span>
+                  </Link>
+                ))}
+              </div>
+            </div>
+          )}
+          {mine.length > 0 && (
+            <div>
+              <strong className="small">On your plate</strong>
+              <div className="stack" style={{ gap: 2, marginTop: 4 }}>
+                {mine.map(({ item, list }) => (
+                  <Link key={item.id} href={`/trips/${tripId}/lists/${list.id}?item=${item.id}`} className="check-row" style={{ textDecoration: "none" }}>
+                    <span aria-hidden>{list.icon}</span>
+                    <span className="grow small">{item.title || "Untitled"} <span className="muted">· {list.name}</span></span>
+                  </Link>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

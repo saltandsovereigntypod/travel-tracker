@@ -151,7 +151,7 @@ export function BudgetSection({ compact = false }: { compact?: boolean }) {
         <div className="card stat"><small>Spent (paid)</small><strong>{formatMoney(spent, cur)}</strong></div>
         <div className="card stat"><small>Still to pay</small><strong>{formatMoney(stillToPay, cur)}</strong><span className="tiny muted">of {formatMoney(committedTotal, cur)} planned</span></div>
         <div className="card stat">
-          <small>{remainingBudget >= 0 ? "Left in budget" : "Over budget"}</small>
+          <small>{!budget || remainingBudget >= 0 ? "Left in budget" : "Over budget"}</small>
           <strong style={{ color: remainingBudget < 0 ? "var(--danger)" : undefined }}>{budget ? formatMoney(Math.abs(remainingBudget), cur) : "—"}</strong>
         </div>
         <div className="card stat"><small>Wishlist (ideas)</small><strong>{formatMoney(wishlist, cur)}</strong><span className="tiny muted">if you did every idea</span></div>
@@ -273,11 +273,12 @@ export function BudgetSection({ compact = false }: { compact?: boolean }) {
 function ToPayRow({ thing: c, canEdit, onPay }: { thing: CostedThing; canEdit: boolean; onPay: (p: ExpensePreset) => void }) {
   const { trip } = useTrip();
   const cur = trip?.currency ?? "USD";
-  const emoji = c.type === "flight" ? "✈️" : c.type === "stay" ? "🏨" : "🎟️";
-  const category = c.type === "flight" ? "flights" : c.type === "stay" ? "lodging" : "activities";
+  // List items already carry their list's icon in the title.
+  const emoji = c.type === "flight" ? "✈️" : c.type === "stay" ? "🏨" : c.type === "list_item" ? null : "🎟️";
+  const category = c.type === "flight" ? "flights" : c.type === "stay" ? "lodging" : c.type === "list_item" ? "other" : "activities";
   return (
     <div className="check-row">
-      <span className="cat-dot">{emoji}</span>
+      {emoji && <span className="cat-dot">{emoji}</span>}
       <div className="grow">
         <strong className="small" style={{ display: "block" }}>{c.title}</strong>
         <span className="tiny muted">{c.day ? formatDay(c.day) : "No date"} · {c.participants.length} {c.participants.length === 1 ? "person" : "people"} · <PayStatus thing={c} /></span>
@@ -394,7 +395,8 @@ export function ExpenseModal({ expense, preset, onClose }: { expense: Expense | 
   const linkedTitle =
     form.linked_type === "itinerary" ? rows.itinerary_items.find((i) => i.id === form.linked_id)?.title :
     form.linked_type === "flight" ? (() => { const f = rows.flights.find((x) => x.id === form.linked_id); return f ? `${f.from_code}→${f.to_code} flight` : undefined; })() :
-    form.linked_type === "stay" ? rows.stays.find((s) => s.id === form.linked_id)?.name : undefined;
+    form.linked_type === "stay" ? rows.stays.find((s) => s.id === form.linked_id)?.name :
+    form.linked_type === "list_item" ? rows.list_items.find((i) => i.id === form.linked_id)?.title : undefined;
 
   return (
     <Modal
