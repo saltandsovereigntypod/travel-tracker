@@ -2,13 +2,15 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { ThumbsUp, ThumbsDown, MessageCircle, Plus, ExternalLink, CalendarPlus, MapPin, Lightbulb, Trash2 } from "lucide-react";
+import { ThumbsUp, ThumbsDown, MessageCircle, Plus, ExternalLink, CalendarPlus, MapPin, Lightbulb, Trash2, Pencil } from "lucide-react";
 import clsx from "clsx";
 import { useTrip } from "../TripProvider";
 import { ModuleTitle } from "../ModuleTitle";
 import { Modal } from "../ui/Modal";
 import { Avatar, EmptyState, Field, PlaceSearch, Segmented } from "../ui/Fields";
 import { CostEditor, costColumns, costValueFrom, type CostValue } from "../ui/CostEditor";
+import { CardOptions, useCardParts } from "../ui/CardOptions";
+import { mapsLink } from "@/lib/services";
 import { ideaTotal } from "./money";
 import { orderForTime, itemsForDay } from "./itinerary-order";
 import { pickCost, unitLabel } from "@/lib/costs";
@@ -47,8 +49,9 @@ export function IdeasSection({ compact = false, limit }: { compact?: boolean; li
   const [filter, setFilter] = useState<Filter>("all");
   const [sort, setSort] = useState<"top" | "new">("top");
   const [category, setCategory] = useState("");
-  const [editing, setEditing] = useState<Idea | "new" | null>(null);
+  const [open, setOpen] = useState<{ idea: Idea | "new"; edit: boolean } | null>(null);
   const [scheduling, setScheduling] = useState<Idea | null>(null);
+  const setEditing = (i: Idea | "new" | null) => setOpen(i ? { idea: i, edit: true } : null);
 
   const counts = useMemo(() => {
     const c: Record<string, number> = { all: rows.ideas.length, open: 0, maybe: 0, planned: 0, passed: 0, tovote: 0 };
@@ -120,6 +123,7 @@ export function IdeasSection({ compact = false, limit }: { compact?: boolean; li
             ))}
           </select>
           <Segmented size="sm" value={sort} onChange={setSort} options={[{ value: "top", label: "Top voted" }, { value: "new", label: "Newest" }]} />
+          <CardOptions kind="ideas" title="Idea cards" />
         </div>
       )}
 
@@ -134,7 +138,7 @@ export function IdeasSection({ compact = false, limit }: { compact?: boolean; li
       ) : (
         <div className="grid-cards" style={compact ? { gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))" } : undefined}>
           {list.map((idea) => (
-            <IdeaCard key={idea.id} idea={idea} compact={compact} onEdit={() => setEditing(idea)} onSchedule={() => setScheduling(idea)} />
+            <IdeaCard key={idea.id} idea={idea} compact={compact} onOpen={() => setOpen({ idea, edit: false })} onSchedule={() => setScheduling(idea)} />
           ))}
         </div>
       )}
@@ -144,13 +148,15 @@ export function IdeasSection({ compact = false, limit }: { compact?: boolean; li
           <Link className="btn btn-sm btn-ghost" href={`/trips/${tripId}/ideas`}>See all {rows.ideas.length} →</Link>
         </div>
       )}
-      <IdeaModal idea={editing} onClose={() => setEditing(null)} onSchedule={(i) => { setEditing(null); setScheduling(i); }} />
+      <IdeaPanel open={open} onClose={() => setOpen(null)} onEdit={(i) => setOpen({ idea: i, edit: true })} onView={(i) => setOpen({ idea: i, edit: false })} onSchedule={(i) => { setOpen(null); setScheduling(i); }} />
       <ScheduleModal idea={scheduling} onClose={() => setScheduling(null)} />
     </div>
   );
 }
 
-function IdeaCard({ idea, compact, onEdit, onSchedule }: { idea: Idea; compact?: boolean; onEdit: () => void; onSchedule: () => void }) {
+function IdeaCard({ idea, compact, onOpen, onSchedule }: { idea: Idea; compact?: boolean; onOpen: () => void; onSchedule: () => void }) {
+  const show = useCardParts("ideas");
+  const onEdit = onOpen;
   const { me, rows, vote, nameOf, colorOf, canEdit, trip, goingIds, householdOf } = useTrip();
   const scores = useIdeaScores();
   const everyoneIn = useEveryoneIn()(idea.id);
@@ -163,7 +169,7 @@ function IdeaCard({ idea, compact, onEdit, onSchedule }: { idea: Idea; compact?:
 
   return (
     <article className={clsx("card idea-card card-hover", `status-${idea.status}`)}>
-      {!compact && (
+      {!compact && show("photo") && (
         <button
           className={clsx("idea-img", !idea.image_url && "noimg")}
           onClick={onEdit}
@@ -177,7 +183,7 @@ function IdeaCard({ idea, compact, onEdit, onSchedule }: { idea: Idea; compact?:
         <div className="row-between" style={{ alignItems: "flex-start" }}>
           <button onClick={onEdit} style={{ all: "unset", cursor: "pointer" }}>
             <h3>
-              {compact ? <span style={{ marginRight: 6 }}>{cat.emoji}</span> : !idea.image_url && <span className="show-phone" style={{ marginRight: 6 }}>{cat.emoji}</span>}
+              {compact || !show("photo") ? <span style={{ marginRight: 6 }}>{cat.emoji}</span> : !idea.image_url && <span className="show-phone" style={{ marginRight: 6 }}>{cat.emoji}</span>}
               {idea.title}
             </h3>
           </button>
@@ -185,51 +191,51 @@ function IdeaCard({ idea, compact, onEdit, onSchedule }: { idea: Idea; compact?:
           {idea.status === "maybe" && <span className="chip chip-2">Maybe</span>}
           {idea.status !== "planned" && everyoneIn && <span className="chip badge-in"><Check size={12} /> Everyone&apos;s in</span>}
         </div>
-        {!compact && idea.description && <p className="muted small" style={{ display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{idea.description}</p>}
+        {!compact && show("about") && idea.description && <p className="muted small" style={{ display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{idea.description}</p>}
         <div className="chip-row">
-          {!compact && <span className="chip">{cat.emoji} {cat.label}</span>}
-          {idea.est_cost != null && (
+          {!compact && show("category") && <span className="chip">{cat.emoji} {cat.label}</span>}
+          {show("price") && idea.est_cost != null && (
             <span className="chip chip-muted" title={`${formatMoney(idea.est_cost, trip?.currency)} ${unitLabel(pickCost(idea))}`}>
               {formatMoney(idea.est_cost, trip?.currency)} {idea.cost_unit !== "group" && unitLabel(pickCost(idea))}
               {total != null && idea.cost_unit !== "group" && <> · ≈{formatMoney(total, trip?.currency, true)}</>}
             </span>
           )}
-          {idea.location?.name && !compact && <span className="chip chip-muted"><MapPin size={12} /> {idea.location.name}</span>}
-          {idea.url && (
+          {show("place") && idea.location?.name && !compact && <span className="chip chip-muted"><MapPin size={12} /> {idea.location.name}</span>}
+          {show("link") && idea.url && (
             <a className="chip chip-2" href={idea.url} target="_blank" rel="noopener noreferrer">
               <ExternalLink size={12} /> {hostname(idea.url)}
             </a>
           )}
         </div>
-        {voters.length > 0 && (
+        {show("voters") && voters.length > 0 && (
           <span className="voters">
             <span className="avatar-stack">{voters.map((u) => <Avatar key={u} name={nameOf(u)} color={colorOf(u)} size={18} />)}</span>
             {voters.map((u) => nameOf(u).split(" ")[0]).join(", ")} 👍
           </span>
         )}
-        {!compact && (
+        {!compact && show("addedBy") && (
           <span className="row tiny muted" style={{ marginTop: "auto" }}>
             <Avatar name={nameOf(idea.created_by)} color={colorOf(idea.created_by)} size={18} /> Added by {nameOf(idea.created_by)}
           </span>
         )}
       </div>
-      <div className="idea-foot">
-        <button className={clsx("vote-btn vote-big", mine === 1 && "on")} onClick={() => vote(idea.id, mine === 1 ? 0 : 1)} aria-label="Vote up" title={voters.map(nameOf).join(", ") || "Vote up"}>
+      {(show("votes") || show("comments") || show("schedule")) && <div className="idea-foot">
+        {show("votes") && <><button className={clsx("vote-btn vote-big", mine === 1 && "on")} onClick={() => vote(idea.id, mine === 1 ? 0 : 1)} aria-label="Vote up" title={voters.map(nameOf).join(", ") || "Vote up"}>
           <ThumbsUp size={14} /> {s.up}
         </button>
         <button className={clsx("vote-btn vote-big down", mine === -1 && "on")} onClick={() => vote(idea.id, mine === -1 ? 0 : -1)} aria-label="Vote down">
           <ThumbsDown size={14} /> {s.down || ""}
-        </button>
-        <button className="vote-btn" onClick={onEdit} aria-label="Comments">
+        </button></>}
+        {show("comments") && <button className="vote-btn" onClick={onEdit} aria-label="Comments">
           <MessageCircle size={14} /> {comments || ""}
-        </button>
+        </button>}
         <div className="grow" />
-        {canEdit && idea.status !== "planned" && (
+        {show("schedule") && canEdit && idea.status !== "planned" && (
           <button className="btn btn-sm btn-ghost" onClick={onSchedule} title="Add to itinerary">
             <CalendarPlus size={15} /> {!compact && "Schedule"}
           </button>
         )}
-      </div>
+      </div>}
     </article>
   );
 }
@@ -239,30 +245,134 @@ const blankIdea = {
   cost: costValueFrom(null, null, "person") as CostValue, location: {} as Place, status: "open" as IdeaStatus,
 };
 
-function IdeaModal({ idea, onClose, onSchedule }: { idea: Idea | "new" | null; onClose: () => void; onSchedule: (i: Idea) => void }) {
-  const { insert, update, remove, canEdit, trip, me, goingIds, householdOf } = useTrip();
-  const isNew = idea === "new";
-  const existing = idea && idea !== "new" ? idea : null;
-  const [form, setForm] = useState(blankIdea);
-  const [loadedFor, setLoadedFor] = useState<string | null>(null);
-  const key = isNew ? "new" : existing?.id ?? null;
-  if (key !== loadedFor) {
-    setLoadedFor(key);
-    setForm(
-      existing
-        ? {
-            title: existing.title,
-            description: existing.description,
-            url: existing.url ?? "",
-            image_url: existing.image_url ?? "",
-            category: existing.category,
-            cost: costValueFrom(existing.est_cost, existing),
-            location: existing.location ?? {},
-            status: existing.status,
-          }
-        : blankIdea,
-    );
-  }
+function IdeaPanel({
+  open,
+  onClose,
+  onEdit,
+  onView,
+  onSchedule,
+}: {
+  open: { idea: Idea | "new"; edit: boolean } | null;
+  onClose: () => void;
+  onEdit: (i: Idea) => void;
+  onView: (i: Idea) => void;
+  onSchedule: (i: Idea) => void;
+}) {
+  const { canEdit, rows, remove } = useTrip();
+  const live = open && open.idea !== "new" ? rows.ideas.find((x) => x.id === (open.idea as Idea).id) ?? null : null;
+  const isNew = open?.idea === "new";
+  const editing = !!open && (open.edit || isNew) && canEdit;
+  return (
+    <Modal
+      open={!!open && (isNew || !!live)}
+      onClose={onClose}
+      variant="panel"
+      title={isNew ? "New idea" : live?.title ?? ""}
+      actions={!editing && live && canEdit ? <button className="btn btn-sm" onClick={() => onEdit(live)}><Pencil size={14} /> Edit</button> : undefined}
+      footer={
+        editing ? (
+          <>
+            {live && (
+              <button
+                className="btn btn-danger"
+                type="button"
+                onClick={async () => {
+                  if (confirm(`Delete "${live.title}"?`)) {
+                    await remove("ideas", live.id);
+                    onClose();
+                  }
+                }}
+              >
+                <Trash2 size={15} /> Delete
+              </button>
+            )}
+            <span className="spacer" />
+            <button className="btn" type="button" onClick={live ? () => onView(live) : onClose}>Cancel</button>
+            <button className="btn btn-primary" form="idea-form">{isNew ? "Add idea" : "Save"}</button>
+          </>
+        ) : undefined
+      }
+    >
+      {editing ? <IdeaForm key={live?.id ?? "new"} existing={live} onDone={live ? () => onView(live) : onClose} /> : live ? <IdeaDetails idea={live} onSchedule={() => onSchedule(live)} /> : null}
+    </Modal>
+  );
+}
+
+function IdeaDetails({ idea, onSchedule }: { idea: Idea; onSchedule: () => void }) {
+  const { rows, me, vote, nameOf, colorOf, canEdit, trip, goingIds, householdOf } = useTrip();
+  const scores = useIdeaScores();
+  const s = scores[idea.id] ?? { up: 0, down: 0, score: 0 };
+  const mine = rows.idea_votes.find((v) => v.idea_id === idea.id && v.user_id === me)?.value ?? 0;
+  const cat = categoryOf(idea.category);
+  const total = ideaTotal(idea, goingIds, householdOf);
+  const up = rows.idea_votes.filter((v) => v.idea_id === idea.id && v.value > 0).map((v) => v.user_id);
+  const down = rows.idea_votes.filter((v) => v.idea_id === idea.id && v.value < 0).map((v) => v.user_id);
+  const where = mapsLink(idea.location);
+  const status = { open: "New", maybe: "Maybe", planned: "Planned", passed: "Passed" }[idea.status];
+  return (
+    <div className="detail">
+      {idea.image_url && <div className="detail-photo" style={{ backgroundImage: `url("${idea.image_url.replace(/"/g, "")}")` }} />}
+      <div className="row wrap" style={{ gap: 6 }}>
+        <span className="chip">{cat.emoji} {cat.label}</span>
+        <span className={idea.status === "planned" ? "chip chip-ok" : "chip chip-muted"}>{status}</span>
+      </div>
+      {idea.description && <p className="detail-notes">{idea.description}</p>}
+      <div className="detail-grid">
+        <div>
+          <small>Rough cost</small>
+          {idea.est_cost != null ? (
+            <>
+              {formatMoney(idea.est_cost, trip?.currency)} {idea.cost_unit !== "group" && unitLabel(pickCost(idea))}
+              {total != null && idea.cost_unit !== "group" && <span className="tiny muted" style={{ display: "block" }}>≈ {formatMoney(total, trip?.currency)} for everyone going</span>}
+            </>
+          ) : "—"}
+        </div>
+        <div><small>Added by</small><span className="row" style={{ gap: 5 }}><Avatar name={nameOf(idea.created_by)} color={colorOf(idea.created_by)} size={18} /> {nameOf(idea.created_by)}</span></div>
+      </div>
+      {(idea.location?.name || idea.url) && (
+        <div className="row wrap" style={{ gap: 6 }}>
+          {idea.location?.name && (where ? <a className="chip chip-2" href={where} target="_blank" rel="noopener noreferrer"><MapPin size={12} /> {idea.location.name}</a> : <span className="chip chip-muted"><MapPin size={12} /> {idea.location.name}</span>)}
+          {idea.url && <a className="chip chip-2" href={idea.url} target="_blank" rel="noopener noreferrer"><ExternalLink size={12} /> {hostname(idea.url)}</a>}
+        </div>
+      )}
+      <div className="detail-section">
+        <h3>Votes</h3>
+        <div className="row wrap" style={{ gap: 8 }}>
+          <button className={clsx("vote-btn vote-big", mine === 1 && "on")} onClick={() => vote(idea.id, mine === 1 ? 0 : 1)} aria-label="Vote up"><ThumbsUp size={14} /> {s.up}</button>
+          <button className={clsx("vote-btn vote-big down", mine === -1 && "on")} onClick={() => vote(idea.id, mine === -1 ? 0 : -1)} aria-label="Vote down"><ThumbsDown size={14} /> {s.down || ""}</button>
+          <span className="small muted">
+            {up.length ? <>{up.map((u) => nameOf(u).split(" ")[0]).join(", ")} 👍</> : "No votes yet"}
+            {down.length > 0 && <> · {down.map((u) => nameOf(u).split(" ")[0]).join(", ")} 👎</>}
+          </span>
+        </div>
+      </div>
+      {canEdit && idea.status !== "planned" && (
+        <button className="btn btn-primary" style={{ alignSelf: "flex-start" }} onClick={onSchedule}><CalendarPlus size={15} /> Add to itinerary</button>
+      )}
+      <div className="detail-section">
+        <h3>Comments</h3>
+        <CommentThread entity="idea" id={idea.id} />
+      </div>
+    </div>
+  );
+}
+
+function IdeaForm({ existing, onDone }: { existing: Idea | null; onDone: () => void }) {
+  const { insert, update, canEdit, trip, me, goingIds, householdOf } = useTrip();
+  const [form, setForm] = useState(() =>
+    existing
+      ? {
+          title: existing.title,
+          description: existing.description,
+          url: existing.url ?? "",
+          image_url: existing.image_url ?? "",
+          category: existing.category,
+          cost: costValueFrom(existing.est_cost, existing),
+          location: existing.location ?? {},
+          status: existing.status,
+        }
+      : blankIdea,
+  );
   const set = <K extends keyof typeof form>(k: K, v: (typeof form)[K]) => setForm((f) => ({ ...f, [k]: v }));
   const near = trip?.lat != null && trip?.lng != null ? { lat: trip.lat, lng: trip.lng } : null;
 
@@ -280,46 +390,11 @@ function IdeaModal({ idea, onClose, onSchedule }: { idea: Idea | "new" | null; o
     };
     if (!row.title) return;
     const ok = existing ? await update("ideas", existing.id, row) : !!(await insert("ideas", { ...row, created_by: me }));
-    if (ok) onClose();
+    if (ok) onDone();
   }
 
   return (
-    <Modal
-      open={!!idea}
-      onClose={onClose}
-      title={isNew ? "New idea" : canEdit ? "Edit idea" : existing?.title}
-      size="lg"
-      footer={
-        canEdit && (
-          <>
-            {existing && (
-              <button
-                className="btn btn-danger"
-                type="button"
-                onClick={async () => {
-                  if (confirm(`Delete "${existing.title}"?`)) {
-                    await remove("ideas", existing.id);
-                    onClose();
-                  }
-                }}
-              >
-                <Trash2 size={15} /> Delete
-              </button>
-            )}
-            {existing && existing.status !== "planned" && (
-              <button className="btn" type="button" onClick={() => onSchedule(existing)}>
-                <CalendarPlus size={15} /> Add to itinerary
-              </button>
-            )}
-            <span className="spacer" />
-            <button className="btn" type="button" onClick={onClose}>Cancel</button>
-            <button className="btn btn-primary" form="idea-form" disabled={!form.title.trim()}>{isNew ? "Add idea" : "Save"}</button>
-          </>
-        )
-      }
-    >
-      <div style={{ display: "grid", gridTemplateColumns: existing ? "minmax(0, 1.4fr) minmax(0, 1fr)" : "1fr", gap: "1.4rem" }} className="idea-modal-grid">
-        <form id="idea-form" className="form-grid" onSubmit={save}>
+    <form id="idea-form" className="form-grid" onSubmit={save}>
           <fieldset disabled={!canEdit} style={{ display: "contents" }}>
             <Field label="What is it?" full>
               <input className="input" value={form.title} onChange={(e) => set("title", e.target.value)} placeholder="Salem Witch Museum" required maxLength={200} />
@@ -364,15 +439,7 @@ function IdeaModal({ idea, onClose, onSchedule }: { idea: Idea | "new" | null; o
               </Field>
             )}
           </fieldset>
-        </form>
-        {existing && (
-          <div>
-            <h3 style={{ marginBottom: "0.8rem" }}>Comments</h3>
-            <CommentThread entity="idea" id={existing.id} />
-          </div>
-        )}
-      </div>
-    </Modal>
+    </form>
   );
 }
 

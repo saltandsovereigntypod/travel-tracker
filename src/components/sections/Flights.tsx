@@ -13,6 +13,7 @@ import { CostEditor, costColumns, costValueFrom, type CostValue } from "../ui/Co
 import { PaymentPanel, PayStatus } from "./Payments";
 import { participantsForFlight, useMoney } from "./money";
 import { AirportInput } from "../travel/AirportInput";
+import { CardOptions, useCardParts } from "../ui/CardOptions";
 import { leg, useTravel } from "../travel/useTravel";
 import { addDays, formatDay, formatMoney, formatTime, splitLocal } from "@/lib/format";
 import { flightOptionKey, stayForDay } from "@/lib/travel";
@@ -60,7 +61,10 @@ export function FlightsSection({ compact = false }: { compact?: boolean }) {
             <ModuleTitle id="flights" fallback="Flights" />
             <p>Who&apos;s flying when, with confirmation codes in one place. Add flights you&apos;re still considering too, with a rough date and price.</p>
           </div>
-          {canEdit && <button className="btn btn-primary" onClick={() => setOpen({ flight: "new", edit: true })}><Plus size={16} /> Add flight</button>}
+          <div className="toolbar">
+            <CardOptions kind="flights" title="Flight cards" />
+            {canEdit && <button className="btn btn-primary" onClick={() => setOpen({ flight: "new", edit: true })}><Plus size={16} /> Add flight</button>}
+          </div>
         </div>
       )}
       {flights.length === 0 ? (
@@ -95,7 +99,7 @@ export function FlightsSection({ compact = false }: { compact?: boolean }) {
       {compact && flights.length > shown.length && (
         <Link className="btn btn-sm btn-ghost" style={{ marginTop: 8 }} href={`/trips/${tripId}/flights`}>All flights →</Link>
       )}
-      <FlightPanel open={open} onClose={() => setOpen(null)} onEdit={(f) => setOpen({ flight: f, edit: true })} />
+      <FlightPanel open={open} onClose={() => setOpen(null)} onEdit={(f) => setOpen({ flight: f, edit: true })} onView={(f) => setOpen({ flight: f, edit: false })} />
     </div>
   );
 }
@@ -149,6 +153,7 @@ function OptionRow({ flight: f, cheapest, others, onOpen }: { flight: Flight; ch
 
 function BoardingPass({ flight: f, compact, onOpen }: { flight: Flight; compact?: boolean; onOpen: () => void }) {
   const { nameOf, colorOf } = useTrip();
+  const show = useCardParts("flights");
   const toast = useToast();
   const dep = splitLocal(f.depart_local);
   const arr = splitLocal(f.arrive_local);
@@ -184,7 +189,7 @@ function BoardingPass({ flight: f, compact, onOpen }: { flight: Flight; compact?
             <div className="tiny muted">{formatDay(arr.day)}</div>
           </div>
         </div>
-        {!compact && f.travelers.length > 0 && (
+        {!compact && show("travelers") && f.travelers.length > 0 && (
           <div className="row">
             <div className="avatar-stack">
               {f.travelers.map((id) => <Avatar key={id} name={nameOf(id)} color={colorOf(id)} size={24} />)}
@@ -194,7 +199,7 @@ function BoardingPass({ flight: f, compact, onOpen }: { flight: Flight; compact?
         )}
       </div>
       <div className="pass-stub">
-        <span className="tiny muted">Confirmation</span>
+        {show("confirmation") && <><span className="tiny muted">Confirmation</span>
         {f.confirmation ? (
           <button
             className="btn btn-sm btn-ghost"
@@ -209,9 +214,9 @@ function BoardingPass({ flight: f, compact, onOpen }: { flight: Flight; compact?
           </button>
         ) : (
           <span className="muted">—</span>
-        )}
-        {f.seats && <span className="tiny">Seats {f.seats}</span>}
-        <FlightMoney flight={f} />
+        )}</>}
+        {show("seats") && f.seats && <span className="tiny">Seats {f.seats}</span>}
+        {show("price") && <FlightMoney flight={f} />}
       </div>
     </article>
   );
@@ -237,7 +242,7 @@ function FlightMoney({ flight: f }: { flight: Flight }) {
 
 // ---------------------------------------------------------------- panel
 
-function FlightPanel({ open, onClose, onEdit }: { open: { flight: Flight | "new"; edit: boolean } | null; onClose: () => void; onEdit: (f: Flight) => void }) {
+function FlightPanel({ open, onClose, onEdit, onView }: { open: { flight: Flight | "new"; edit: boolean } | null; onClose: () => void; onEdit: (f: Flight) => void; onView: (f: Flight) => void }) {
   const { canEdit, rows } = useTrip();
   // Always show the latest copy (someone else may have edited it).
   const live = open && open.flight !== "new" ? rows.flights.find((f) => f.id === (open.flight as Flight).id) ?? null : null;
@@ -249,14 +254,14 @@ function FlightPanel({ open, onClose, onEdit }: { open: { flight: Flight | "new"
       variant="panel"
       title={open?.flight === "new" ? "Add a flight" : live ? flightLabel(live) : ""}
       actions={!editing && live && canEdit ? <button className="btn btn-sm" onClick={() => onEdit(live)}><Pencil size={14} /> Edit</button> : undefined}
-      footer={editing && canEdit ? <FormFooter flight={live} onClose={onClose} /> : undefined}
+      footer={editing && canEdit ? <FormFooter flight={live} onClose={onClose} onCancel={live ? () => onView(live) : onClose} /> : undefined}
     >
-      {editing ? <FlightForm key={live?.id ?? "new"} flight={live} onDone={onClose} /> : live ? <FlightDetails flight={live} /> : null}
+      {editing ? <FlightForm key={live?.id ?? "new"} flight={live} onDone={live ? () => onView(live) : onClose} /> : live ? <FlightDetails flight={live} /> : null}
     </Modal>
   );
 }
 
-function FormFooter({ flight, onClose }: { flight: Flight | null; onClose: () => void }) {
+function FormFooter({ flight, onClose, onCancel }: { flight: Flight | null; onClose: () => void; onCancel: () => void }) {
   const { remove } = useTrip();
   return (
     <>
@@ -266,7 +271,7 @@ function FormFooter({ flight, onClose }: { flight: Flight | null; onClose: () =>
         </button>
       )}
       <span className="spacer" />
-      <button className="btn" type="button" onClick={onClose}>Cancel</button>
+      <button className="btn" type="button" onClick={onCancel}>Cancel</button>
       <button className="btn btn-primary" form="flight-form">{flight ? "Save" : "Add flight"}</button>
     </>
   );

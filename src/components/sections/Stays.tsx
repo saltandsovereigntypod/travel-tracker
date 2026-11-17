@@ -13,6 +13,7 @@ import { CostEditor, costColumns, costValueFrom, type CostValue } from "../ui/Co
 import { PaymentPanel, PayStatus } from "./Payments";
 import { participantsForStay, stayNights, useMoney } from "./money";
 import { useTravel } from "../travel/useTravel";
+import { CardOptions, useCardParts } from "../ui/CardOptions";
 import { STAY_KINDS, stayKindOf } from "@/lib/categories";
 import { daysBetween, formatDay, formatMoney, formatRange, formatTime, normalizeUrl, hostname } from "@/lib/format";
 import { distanceKm, formatDistance } from "@/lib/geo";
@@ -41,7 +42,10 @@ export function StaysSection({ compact = false }: { compact?: boolean }) {
             <ModuleTitle id="stays" fallback="Stays" />
             <p>Hotels, hostels, rentals and couches. {totalNights > 0 && `${totalNights} night${totalNights === 1 ? "" : "s"} booked.`}</p>
           </div>
-          {canEdit && <button className="btn btn-primary" onClick={() => setOpen({ stay: "new", edit: true })}><Plus size={16} /> Add stay</button>}
+          <div className="toolbar">
+            <CardOptions kind="stays" title="Stay cards" />
+            {canEdit && <button className="btn btn-primary" onClick={() => setOpen({ stay: "new", edit: true })}><Plus size={16} /> Add stay</button>}
+          </div>
         </div>
       )}
       {!compact && isTrip && <WhereToStay />}
@@ -80,7 +84,7 @@ export function StaysSection({ compact = false }: { compact?: boolean }) {
       {compact && stays.length > shown.length && (
         <Link className="btn btn-sm btn-ghost" style={{ marginTop: 8 }} href={`/trips/${tripId}/stays`}>All stays →</Link>
       )}
-      <StayPanel open={open} onClose={() => setOpen(null)} onEdit={(s) => setOpen({ stay: s, edit: true })} />
+      <StayPanel open={open} onClose={() => setOpen(null)} onEdit={(s) => setOpen({ stay: s, edit: true })} onView={(s) => setOpen({ stay: s, edit: false })} />
     </div>
   );
 }
@@ -178,6 +182,7 @@ function StayCard({ stay: s, compact, onOpen }: { stay: Stay; compact?: boolean;
   const dirs = mapsLink(s.location, s.address || s.name);
   const fromAirport = travel.stayLegFromAirport(s);
   const fit = travel.fitOf(s.id);
+  const show = useCardParts("stays");
   return (
     <article className="card card-hover" style={{ cursor: "pointer", opacity: s.status === "cancelled" ? 0.5 : 1 }} onClick={onOpen}>
       <div className="row" style={{ alignItems: "flex-start" }}>
@@ -188,10 +193,10 @@ function StayCard({ stay: s, compact, onOpen }: { stay: Stay; compact?: boolean;
             {s.status === "idea" && <span className="chip chip-2">Option</span>}
             {s.status === "cancelled" && <span className="chip chip-muted">Not chosen</span>}
           </div>
-          <span className="tiny muted">{kind.label}{s.address && ` · ${s.address}`}</span>
+          <span className="tiny muted">{kind.label}{show("address") && s.address && ` · ${s.address}`}</span>
         </div>
       </div>
-      <div className="row-between" style={{ marginTop: "0.9rem", gap: "0.4rem" }}>
+      {show("dates") && <div className="row-between" style={{ marginTop: "0.9rem", gap: "0.4rem" }}>
         <div>
           <div className="tiny muted">Check in</div>
           <strong className="small">{formatDay(s.check_in) || "—"}</strong>
@@ -203,8 +208,8 @@ function StayCard({ stay: s, compact, onOpen }: { stay: Stay; compact?: boolean;
           <strong className="small">{formatDay(s.check_out) || "—"}</strong>
           {s.check_out_time && <div className="tiny muted">{formatTime(s.check_out_time)}</div>}
         </div>
-      </div>
-      {!compact && (fromAirport || fit?.avgKm != null) && (
+      </div>}
+      {!compact && show("distance") && (fromAirport || fit?.avgKm != null) && (
         <div className="stack tiny muted" style={{ gap: 2, marginTop: "0.7rem" }}>
           {fromAirport && <span className="row" style={{ gap: 5 }}><Plane size={12} /> {fromAirport.label} from {fromAirport.airport.code}</span>}
           {fit?.avgKm != null && fit.plans > 0 && <span className="row" style={{ gap: 5 }}><MapPin size={12} /> {formatDistance(fit.avgKm)} from your plans on average</span>}
@@ -212,17 +217,17 @@ function StayCard({ stay: s, compact, onOpen }: { stay: Stay; compact?: boolean;
       )}
       {!compact && (
         <div className="row wrap" style={{ marginTop: "0.9rem", gap: "0.4rem" }} onClick={(e) => e.stopPropagation()}>
-          {s.confirmation && (
+          {show("confirmation") && s.confirmation && (
             <button className="chip chip-muted" style={{ cursor: "pointer", border: 0 }} onClick={() => { void navigator.clipboard?.writeText(s.confirmation); toast.success("Confirmation copied"); }}>
               <Copy size={11} /> {s.confirmation}
             </button>
           )}
-          {costed?.total != null && <span className="chip chip-muted">{formatMoney(costed.total, trip?.currency)}{nights ? ` · ${formatMoney(costed.total / Math.max(nights, 1), trip?.currency, true)}/night` : ""}</span>}
-          {costed && costed.status !== "none" && <PayStatus thing={costed} />}
-          {dirs && <a className="chip chip-2" href={dirs} target="_blank" rel="noopener noreferrer"><MapPin size={11} /> Map</a>}
-          {s.phone && <a className="chip chip-2" href={`tel:${s.phone}`}><Phone size={11} /> Call</a>}
-          {s.url && <a className="chip chip-2" href={s.url} target="_blank" rel="noopener noreferrer"><ExternalLink size={11} /> {hostname(s.url)}</a>}
-          {s.guests.length > 0 && (
+          {show("price") && costed?.total != null && <span className="chip chip-muted">{formatMoney(costed.total, trip?.currency)}{nights ? ` · ${formatMoney(costed.total / Math.max(nights, 1), trip?.currency, true)}/night` : ""}</span>}
+          {show("price") && costed && costed.status !== "none" && <PayStatus thing={costed} />}
+          {show("links") && dirs && <a className="chip chip-2" href={dirs} target="_blank" rel="noopener noreferrer"><MapPin size={11} /> Map</a>}
+          {show("links") && s.phone && <a className="chip chip-2" href={`tel:${s.phone}`}><Phone size={11} /> Call</a>}
+          {show("links") && s.url && <a className="chip chip-2" href={s.url} target="_blank" rel="noopener noreferrer"><ExternalLink size={11} /> {hostname(s.url)}</a>}
+          {show("guests") && s.guests.length > 0 && (
             <span className="avatar-stack" style={{ marginLeft: "auto" }}>
               {s.guests.map((g) => <Avatar key={g} name={nameOf(g)} color={colorOf(g)} size={22} />)}
             </span>
@@ -235,7 +240,7 @@ function StayCard({ stay: s, compact, onOpen }: { stay: Stay; compact?: boolean;
 
 // ---------------------------------------------------------------- panel
 
-function StayPanel({ open, onClose, onEdit }: { open: Open; onClose: () => void; onEdit: (s: Stay) => void }) {
+function StayPanel({ open, onClose, onEdit, onView }: { open: Open; onClose: () => void; onEdit: (s: Stay) => void; onView: (s: Stay) => void }) {
   const { canEdit, rows, remove } = useTrip();
   const live = open && open.stay !== "new" ? rows.stays.find((s) => s.id === (open.stay as Stay).id) ?? null : null;
   const editing = !!open && (open.edit || open.stay === "new");
@@ -255,13 +260,13 @@ function StayPanel({ open, onClose, onEdit }: { open: Open; onClose: () => void;
               </button>
             )}
             <span className="spacer" />
-            <button className="btn" type="button" onClick={onClose}>Cancel</button>
+            <button className="btn" type="button" onClick={live ? () => onView(live) : onClose}>Cancel</button>
             <button className="btn btn-primary" form="stay-form">{live ? "Save" : "Add stay"}</button>
           </>
         ) : undefined
       }
     >
-      {editing ? <StayForm key={live?.id ?? "new"} stay={live} init={open?.init} onDone={onClose} /> : live ? <StayDetails stay={live} /> : null}
+      {editing ? <StayForm key={live?.id ?? "new"} stay={live} init={open?.init} onDone={live ? () => onView(live) : onClose} /> : live ? <StayDetails stay={live} /> : null}
     </Modal>
   );
 }

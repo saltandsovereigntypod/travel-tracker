@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Trash2, ArrowUpRight, Link2 } from "lucide-react";
+import { Trash2, ArrowUpRight, Link2, Pencil } from "lucide-react";
 import { useTrip } from "../TripProvider";
 import { Modal } from "../ui/Modal";
 import { CommentThread } from "../sections/Comments";
@@ -32,9 +32,12 @@ export function ListItemModal({ list, item, onClose }: { list: ListDef; item: Li
   const live = item ? itemById(item.id) ?? item : null;
   const [title, setTitle] = useState("");
   const [loadedFor, setLoadedFor] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
   if ((live?.id ?? null) !== loadedFor) {
     setLoadedFor(live?.id ?? null);
     setTitle(live?.title ?? "");
+    // Brand-new, untitled items open ready to fill in; everything else opens to read.
+    setEditing(!!live && !live.title.trim());
   }
   if (!live) return null;
 
@@ -58,18 +61,41 @@ export function ListItemModal({ list, item, onClose }: { list: ListDef; item: Li
     onClose();
   }
 
+  const reading = !editing || !canEdit;
+  if (reading) {
+    return (
+      <Modal
+        open
+        onClose={onClose}
+        variant="panel"
+        title={live.title || "Untitled"}
+        actions={canEdit ? <button className="btn btn-sm" onClick={() => setEditing(true)}><Pencil size={14} /> Edit</button> : undefined}
+      >
+        <ItemDetails list={list} item={live} total={total} income={income} onNavigate={onClose} />
+      </Modal>
+    );
+  }
+
   return (
     <Modal
       open
       onClose={onClose}
-      size="lg"
-      title={<span className="row" style={{ fontSize: "1rem" }}>{list.icon} <span className="truncate muted">{list.name}</span></span>}
+      variant="panel"
+      title={<span className="row" style={{ fontSize: "1rem" }}>{list.icon} <span className="truncate muted">Editing</span></span>}
       footer={
         canEdit && (
           <>
             <button className="btn btn-danger" onClick={del}><Trash2 size={15} /> Delete</button>
             <span className="spacer" />
-            <button className="btn btn-primary" onClick={onClose}>Done</button>
+            <button
+              className="btn btn-primary"
+              onClick={async () => {
+                if (title !== live.title) await update("list_items", live.id, { title });
+                setEditing(false);
+              }}
+            >
+              Done
+            </button>
           </>
         )
       }
@@ -157,10 +183,64 @@ export function ListItemModal({ list, item, onClose }: { list: ListDef; item: Li
         {list.fields.some((f) => f.type === "relation") && rows.lists.length < 2 && (
           <p className="tiny muted">Tip: add another list, then a &quot;Link to another list&quot; field, to connect them.</p>
         )}
-
-        <h3 style={{ marginTop: "1rem" }}>Comments</h3>
-        <CommentThread entity="list_item" id={live.id} />
       </div>
     </Modal>
+  );
+}
+
+/** Read view: filled-in fields, links both ways, money and comments. */
+function ItemDetails({ list, item, total, income, onNavigate }: { list: ListDef; item: ListItem; total: number | null; income: number | null; onNavigate: () => void }) {
+  const { tripId } = useTrip();
+  const { ctx } = useEngine();
+  const feeds = itemFeeds(item, list);
+  const filled = list.fields.filter((f) => {
+    if (f.type === "rollup" || f.type === "checkbox") return true;
+    const v = item.values[f.id];
+    return !(v == null || v === "" || (Array.isArray(v) && !v.length) || (typeof v === "object" && !Array.isArray(v) && !Object.keys(v as object).length));
+  });
+  const empty = list.fields.length - filled.length;
+  const backlinks = backlinksFor(list, ctx).map((b) => ({ b, linked: linkedItems(item, b.key, ctx) })).filter((x) => x.linked.length);
+  return (
+    <div className="detail">
+      <div className="row wrap" style={{ gap: 6 }}>
+        <Link className="chip chip-muted" href={listHref(tripId, list.id)} onClick={onNavigate}>{list.icon} {list.name}</Link>
+        {feeds.map((f) => <span key={f} className="feed-chip">{f}</span>)}
+      </div>
+      <div className="detail-fields">
+        {filled.map((f) => (
+          <div key={f.id} className="detail-field">
+            <small>{f.name}</small>
+            <div>
+              {f.type === "relation" ? (
+                <span className="row wrap" style={{ gap: 4 }}>
+                  {linkedItems(item, f.id, ctx).map((i) => (
+                    <Link key={i.id} className="link-chip" href={listHref(tripId, i.list_id, i.id)} onClick={onNavigate}>{i.title || "Untitled"}</Link>
+                  ))}
+                </span>
+              ) : f.type === "longtext" ? (
+                <p className="detail-notes small">{String(item.values[f.id] ?? "")}</p>
+              ) : (
+                <FieldValue field={f} item={item} list={list} />
+              )}
+            </div>
+          </div>
+        ))}
+        {backlinks.map(({ b, linked }) => (
+          <div key={b.key} className="detail-field">
+            <small>{b.fromList.name}</small>
+            <span className="row wrap" style={{ gap: 4 }}>
+              {linked.map((i) => <Link key={i.id} className="link-chip" href={listHref(tripId, b.fromList.id, i.id)} onClick={onNavigate}>{i.title || "Untitled"}</Link>)}
+            </span>
+          </div>
+        ))}
+      </div>
+      {empty > 0 && <p className="tiny muted">{empty} empty field{empty === 1 ? "" : "s"} hidden. Tap Edit to fill {empty === 1 ? "it" : "them"} in.</p>}
+      {total != null && <PaymentPanel type="list_item" id={item.id} category="other" />}
+      {income != null && <PaymentPanel type="list_item" id={item.id} category="other" income />}
+      <div className="detail-section">
+        <h3>Comments</h3>
+        <CommentThread entity="list_item" id={item.id} />
+      </div>
+    </div>
   );
 }
