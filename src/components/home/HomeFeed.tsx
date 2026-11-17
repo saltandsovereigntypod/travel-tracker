@@ -9,6 +9,7 @@ import { addDays, formatDay, formatMoney, formatTime, splitLocal, todayString } 
 import { assignedTo, calendarEntries, itemMoneyTotal, repeatOf, type ListDef, type ListItem } from "@/lib/fields";
 import { expenseShares, netBalances } from "@/lib/balances";
 import { templateFor } from "@/lib/spaces";
+import { pageTasks, type Page } from "@/lib/pages";
 import type { Expense, Flight, ItineraryItem, Member, PackingItem, Stay, Trip } from "@/lib/types";
 
 interface Data {
@@ -20,6 +21,7 @@ interface Data {
   items: ListItem[];
   expenses: Expense[];
   packing: PackingItem[];
+  pages: Page[];
 }
 
 interface Entry {
@@ -51,7 +53,7 @@ export function HomeFeed({ spaces }: { spaces: Trip[] }) {
     let alive = true;
     (async () => {
       const sb = supabase();
-      const [members, plans, flights, stays, lists, items, expenses, packing] = await Promise.all([
+      const [members, plans, flights, stays, lists, items, expenses, packing, pages] = await Promise.all([
         sb.from("trip_members").select("*").in("trip_id", ids),
         sb.from("itinerary_items").select("*").in("trip_id", ids).gte("day", today).lte("day", weekEnd),
         sb.from("flights").select("*").in("trip_id", ids).neq("status", "cancelled").gte("depart_local", today).lte("depart_local", `${weekEnd}T23:59:59`),
@@ -60,6 +62,7 @@ export function HomeFeed({ spaces }: { spaces: Trip[] }) {
         sb.from("list_items").select("*").in("trip_id", ids),
         sb.from("expenses").select("*").in("trip_id", ids),
         sb.from("packing_items").select("*").in("trip_id", ids).eq("assigned_to", me).eq("packed", false),
+        sb.from("pages").select("id, trip_id, title, icon, blocks").in("trip_id", ids),
       ]);
       if (!alive) return;
       setData({
@@ -71,6 +74,7 @@ export function HomeFeed({ spaces }: { spaces: Trip[] }) {
         items: (items.data as ListItem[]) ?? [],
         expenses: (expenses.data as Expense[]) ?? [],
         packing: (packing.data as PackingItem[]) ?? [],
+        pages: (pages.data as Page[]) ?? [],
       });
     })();
     return () => {
@@ -99,12 +103,20 @@ export function HomeFeed({ spaces }: { spaces: Trip[] }) {
       if (c.day < today || c.day > weekEnd) continue;
       week.push({ key: `l${c.item.id}${c.field.id}`, day: c.day, time: c.time, title: `${c.list.icon} ${c.item.title || "Untitled"}`, sub: `${space(c.list.trip_id).name} · ${c.field.name}`, icon: icon(c.list.trip_id), href: `/trips/${c.list.trip_id}/lists/${c.list.id}?item=${c.item.id}` });
     }
+    const tasks = pageTasks(data.pages).filter((t) => !t.done);
+    for (const t of tasks) {
+      if (!t.due || t.due < today || t.due > weekEnd) continue;
+      week.push({ key: `pt${t.block.id}`, day: t.due, time: null, title: `${t.page.icon} ${t.text}`, sub: `${space(t.page.trip_id).name} · ${t.page.title || "Page"}`, icon: icon(t.page.trip_id), href: `/trips/${t.page.trip_id}/pages/${t.page.id}` });
+    }
     week.sort((a, b) => a.day.localeCompare(b.day) || (a.time ?? "99").localeCompare(b.time ?? "99"));
 
     // On your plate: anything assigned to you, anywhere.
     const plate = [
       ...assignedTo(me, { lists: data.lists, items: data.items }).map(({ item, list }) => ({
         key: item.id, title: item.title || "Untitled", sub: `${space(list.trip_id).name} · ${list.name}`, icon: list.icon, href: `/trips/${list.trip_id}/lists/${list.id}?item=${item.id}`,
+      })),
+      ...tasks.filter((t) => t.who === me).map((t) => ({
+        key: t.block.id, title: t.text, sub: `${space(t.page.trip_id).name} · ${t.page.title || "Page"}`, icon: t.page.icon, href: `/trips/${t.page.trip_id}/pages/${t.page.id}`,
       })),
       ...data.packing.map((p) => ({ key: p.id, title: `Bring: ${p.title}`, sub: space(p.trip_id).name, icon: "🧳", href: `/trips/${p.trip_id}/packing` })),
     ];

@@ -60,7 +60,7 @@ export function CardsView({ list, items, onOpen }: ViewProps) {
   );
 }
 
-function ItemCard({ list, item, fields, status, onOpen, dragHandle }: { list: ListDef; item: ListItem; fields: FieldDef[]; status?: FieldDef; onOpen: () => void; dragHandle?: React.ReactNode }) {
+export function ItemCard({ list, item, fields, status, onOpen, dragHandle }: { list: ListDef; item: ListItem; fields: FieldDef[]; status?: FieldDef; onOpen: () => void; dragHandle?: React.ReactNode }) {
   const feeds = itemFeeds(item, list);
   return (
     <div className="card item-card" role="button" tabIndex={0} onClick={onOpen} onKeyDown={(e) => e.key === "Enter" && onOpen()}>

@@ -136,3 +136,15 @@ export function normalizeUrl(input: string | null | undefined): string | null {
 export function uid(prefix = "b"): string {
   return `${prefix}_${Math.random().toString(36).slice(2, 9)}${Date.now().toString(36).slice(-4)}`;
 }
+
+/** "just now", "5 min ago", "3 h ago", "Mar 4". */
+export function timeAgo(ts: string | null | undefined, now: Date = new Date()): string {
+  if (!ts) return "";
+  const then = new Date(ts);
+  const s = Math.max(0, (now.getTime() - then.getTime()) / 1000);
+  if (s < 45) return "just now";
+  if (s < 3600) return `${Math.round(s / 60)} min ago`;
+  if (s < 86400) return `${Math.round(s / 3600)} h ago`;
+  if (s < 6 * 86400) return `${Math.round(s / 86400)} d ago`;
+  return then.toLocaleDateString(undefined, { month: "short", day: "numeric", year: then.getFullYear() === now.getFullYear() ? undefined : "numeric" });
+}

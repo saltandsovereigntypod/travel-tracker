@@ -11,6 +11,7 @@ import { CURRENCIES, searchPlaces } from "@/lib/services";
 import { shrinkImage } from "./Photos";
 import { MODULES, moduleDef } from "@/lib/spaces";
 import { MODULE_ICONS } from "../TripShell";
+import { SaveTemplateCard } from "../templates/TemplateCards";
 import { ChevronUp, ChevronDown } from "lucide-react";
 
 export function TripSettingsSection() {
@@ -124,6 +125,7 @@ export function TripSettingsSection() {
       </form>
 
       <ModulesCard />
+      {canEdit && <SaveTemplateCard />}
 
       {canEdit && (
         <div className="card stack">

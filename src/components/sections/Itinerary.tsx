@@ -29,6 +29,7 @@ const UNSCHEDULED = "unscheduled";
 export { itemsForDay, orderForTime } from "./itinerary-order";
 import { itemsForDay, orderForTime } from "./itinerary-order";
 import { calendarEntries } from "@/lib/fields";
+import { pageTasks } from "@/lib/pages";
 
 interface FixedEvent {
   key: string;
@@ -75,9 +76,22 @@ export function useFixedEvents() {
         icon: c.list.icon,
       });
     }
+    // So do dated to-dos written on pages.
+    for (const t of pageTasks(rows.pages)) {
+      if (!t.due) continue;
+      add(t.due, {
+        key: `p-${t.block.id}`,
+        kind: "list",
+        time: null,
+        title: `${t.done ? "✓ " : ""}${t.text}`,
+        sub: `${t.page.title || "Page"} · To-do`,
+        href: `/trips/${tripId}/pages/${t.page.id}`,
+        icon: t.page.icon,
+      });
+    }
     Object.values(byDay).forEach((l) => l.sort((a, b) => (a.time ?? "99").localeCompare(b.time ?? "99")));
     return byDay;
-  }, [rows.flights, rows.stays, rows.lists, rows.list_items, tripId]);
+  }, [rows.flights, rows.stays, rows.lists, rows.list_items, rows.pages, tripId]);
 }
 
 export function ItinerarySection({ compact = false }: { compact?: boolean }) {

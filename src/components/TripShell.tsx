@@ -13,6 +13,8 @@ import { useTrip } from "./TripProvider";
 import { Avatar } from "./ui/Fields";
 import { Modal } from "./ui/Modal";
 import { NewListModal } from "./lists/NewListModal";
+import { NewPageModal } from "./pages/PagesIndex";
+import { breadcrumbs, childPages } from "@/lib/pages";
 import { Plus } from "lucide-react";
 import { fontHref, readableOn, themeVars } from "@/lib/themes";
 
@@ -62,8 +64,10 @@ export function TripShell({ children }: { children: React.ReactNode }) {
   const parts = pathname.replace(base, "").replace(/^\//, "").split("/");
   const current = parts[0];
   const currentList = current === "lists" ? parts[1] : null;
+  const currentPage = current === "pages" ? parts[1] ?? null : null;
   const [moreOpen, setMoreOpen] = useState(false);
   const [newList, setNewList] = useState(false);
+  const [newPage, setNewPage] = useState(false);
   const theme = view.theme as Required<typeof view.theme>;
 
   useEffect(() => {
@@ -149,6 +153,17 @@ export function TripShell({ children }: { children: React.ReactNode }) {
               <div key={n.slug}>
                 {i === NAV.length - 2 && (
                   <>
+                    {(rows.pages.length > 0 || canEdit) && (
+                      <>
+                        <Link href={`${base}/pages`} className="nav-label nav-label-link">Pages</Link>
+                        <PageTree base={base} pages={rows.pages} current={currentPage} />
+                        {canEdit && (
+                          <button className="nav-add" onClick={() => setNewPage(true)}>
+                            <Plus size={16} /> New page
+                          </button>
+                        )}
+                      </>
+                    )}
                     <div className="nav-label">Lists</div>
                     {rows.lists.map((l) => (
                       <Link key={l.id} href={`${base}/lists/${l.id}`} className={clsx(currentList === l.id && "active")}>
@@ -202,6 +217,25 @@ export function TripShell({ children }: { children: React.ReactNode }) {
             </Link>
           ))}
         </div>
+        {(rows.pages.length > 0 || canEdit) && (
+          <>
+            <div className="nav-label" style={{ padding: "1rem 0 0.4rem" }}>Pages</div>
+            <div className="more-sheet">
+              {childPages(rows.pages, null).map((p) => (
+                <Link key={p.id} href={`${base}/pages/${p.id}`} onClick={() => setMoreOpen(false)}>
+                  <span style={{ fontSize: 22 }} aria-hidden>{p.icon}</span>
+                  <span className="truncate" style={{ maxWidth: "100%" }}>{p.title || "Untitled"}</span>
+                </Link>
+              ))}
+              {canEdit && (
+                <button className="more-add" onClick={() => { setMoreOpen(false); setNewPage(true); }}>
+                  <Plus size={22} />
+                  New page
+                </button>
+              )}
+            </div>
+          </>
+        )}
         {(rows.lists.length > 0 || canEdit) && (
           <>
             <div className="nav-label" style={{ padding: "1rem 0 0.4rem" }}>Lists</div>
@@ -223,6 +257,23 @@ export function TripShell({ children }: { children: React.ReactNode }) {
         )}
       </Modal>
       <NewListModal open={newList} onClose={() => setNewList(false)} />
+      <NewPageModal open={newPage} onClose={() => setNewPage(false)} />
     </div>
   );
+}
+
+/** Top-level pages, with the open page's branch expanded. */
+function PageTree({ base, pages, current }: { base: string; pages: import("@/lib/pages").Page[]; current: string | null }) {
+  const open = new Set(current ? breadcrumbs(pages, current).map((p) => p.id) : []);
+  const render = (parent: string | null, depth: number): React.ReactNode =>
+    childPages(pages, parent).map((p) => (
+      <div key={p.id}>
+        <Link href={`${base}/pages/${p.id}`} className={clsx(current === p.id && "active")} style={depth ? { paddingLeft: `${0.75 + depth * 0.9}rem` } : undefined}>
+          <span aria-hidden style={{ width: 18, textAlign: "center" }}>{p.icon}</span>
+          <span className="truncate">{p.title || "Untitled"}</span>
+        </Link>
+        {open.has(p.id) && depth < 4 && render(p.id, depth + 1)}
+      </div>
+    ));
+  return <>{render(null, 0)}</>;
 }

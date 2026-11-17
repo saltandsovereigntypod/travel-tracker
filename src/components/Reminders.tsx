@@ -7,6 +7,7 @@ import { supabase } from "@/lib/supabase";
 import { addDays, todayString } from "@/lib/format";
 import { calendarEntries, isDone, type ListDef, type ListItem } from "@/lib/fields";
 import type { ItineraryItem } from "@/lib/types";
+import { pageTasks, type Page } from "@/lib/pages";
 
 const ON_KEY = "driftbook:reminders";
 const LAST_KEY = "driftbook:reminders-last";
@@ -34,15 +35,20 @@ async function dueSoon(userId: string): Promise<{ today: string[]; tomorrow: str
   const { data: m } = await sb.from("trip_members").select("trip_id").eq("user_id", userId);
   const ids = (m ?? []).map((x) => x.trip_id as string);
   if (!ids.length) return { today: [], tomorrow: [] };
-  const [lists, items, plans] = await Promise.all([
+  const [lists, items, plans, pages] = await Promise.all([
     sb.from("lists").select("*").in("trip_id", ids),
     sb.from("list_items").select("*").in("trip_id", ids),
     sb.from("itinerary_items").select("*").in("trip_id", ids).gte("day", today).lte("day", tomorrow),
+    sb.from("pages").select("id, trip_id, title, icon, blocks").in("trip_id", ids),
   ]);
   const out = { today: [] as string[], tomorrow: [] as string[] };
   for (const c of calendarEntries({ lists: (lists.data as ListDef[]) ?? [], items: (items.data as ListItem[]) ?? [] }, { from: today, to: tomorrow })) {
     if (isDone(c.item, c.list)) continue;
     (c.day === today ? out.today : out.tomorrow).push(`${c.list.icon} ${c.item.title || c.list.name}`);
+  }
+  for (const t of pageTasks((pages.data as Page[]) ?? [])) {
+    if (t.done || (t.due !== today && t.due !== tomorrow) || (t.who && t.who !== userId)) continue;
+    (t.due === today ? out.today : out.tomorrow).push(`${t.page.icon} ${t.text}`);
   }
   for (const p of (plans.data as ItineraryItem[]) ?? []) (p.day === today ? out.today : out.tomorrow).push(p.title);
   return out;

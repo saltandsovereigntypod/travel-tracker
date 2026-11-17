@@ -5,6 +5,7 @@ import { Plane, BedDouble, MapPin, Sun, Lightbulb } from "lucide-react";
 import { useTrip } from "../TripProvider";
 import { categoryOf } from "@/lib/categories";
 import { assignedTo, calendarEntries, isDone } from "@/lib/fields";
+import { pageTasks } from "@/lib/pages";
 import { addDays, countdown, formatDayLong, formatTime, todayString, tripDays } from "@/lib/format";
 import { mapsLink } from "@/lib/services";
 import { itemsForDay, useFixedEvents } from "./Itinerary";
@@ -30,9 +31,24 @@ export function Countdown({ big = false }: { big?: boolean }) {
 export function TodaySection({ compact = false }: { compact?: boolean }) {
   const { trip, rows, tripId, noun, hasModule, me } = useTrip();
   const engine = { lists: rows.lists, items: rows.list_items };
-  const mine = assignedTo(me, engine).slice(0, 6);
   const horizon = addDays(todayString(), 14);
-  const dueSoon = calendarEntries(engine).filter((c) => c.day >= todayString() && c.day <= horizon && !isDone(c.item, c.list)).slice(0, 6);
+  // To-dos written on pages count too.
+  const tasks = pageTasks(rows.pages).filter((t) => !t.done);
+  const pageHref = (t: (typeof tasks)[number]) => `/trips/${tripId}/pages/${t.page.id}`;
+  const mine = [
+    ...assignedTo(me, engine).map(({ item, list }) => ({ key: item.id, icon: list.icon, title: item.title || "Untitled", sub: list.name, href: `/trips/${tripId}/lists/${list.id}?item=${item.id}` })),
+    ...tasks.filter((t) => t.who === me).map((t) => ({ key: t.block.id, icon: t.page.icon, title: t.text, sub: t.page.title || "Untitled page", href: pageHref(t) })),
+  ].slice(0, 6);
+  const dueSoon = [
+    ...calendarEntries(engine)
+      .filter((c) => c.day >= todayString() && c.day <= horizon && !isDone(c.item, c.list))
+      .map((c) => ({ key: `${c.item.id}${c.field.id}${c.day}`, icon: c.list.icon, title: c.item.title || "Untitled", sub: c.field.name, day: c.day, href: `/trips/${tripId}/lists/${c.list.id}?item=${c.item.id}` })),
+    ...tasks
+      .filter((t) => t.due && t.due >= todayString() && t.due <= horizon)
+      .map((t) => ({ key: t.block.id, icon: t.page.icon, title: t.text, sub: t.page.title || "Page", day: t.due!, href: pageHref(t) })),
+  ]
+    .sort((a, b) => a.day.localeCompare(b.day))
+    .slice(0, 6);
   const fixed = useFixedEvents();
   const scores = useIdeaScores();
   const today = todayString();
@@ -126,9 +142,9 @@ export function TodaySection({ compact = false }: { compact?: boolean }) {
               <strong className="small">Coming up in the next 2 weeks</strong>
               <div className="stack" style={{ gap: 2, marginTop: 4 }}>
                 {dueSoon.map((c) => (
-                  <Link key={`${c.item.id}${c.field.id}`} href={`/trips/${tripId}/lists/${c.list.id}?item=${c.item.id}`} className="check-row" style={{ textDecoration: "none" }}>
-                    <span aria-hidden>{c.list.icon}</span>
-                    <span className="grow small"><strong>{c.item.title || "Untitled"}</strong> <span className="muted">· {c.field.name}</span></span>
+                  <Link key={c.key} href={c.href} className="check-row" style={{ textDecoration: "none" }}>
+                    <span aria-hidden>{c.icon}</span>
+                    <span className="grow small"><strong>{c.title}</strong> <span className="muted">· {c.sub}</span></span>
                     <span className="tiny muted nowrap">{formatDayLong(c.day).replace(/^\w+, /, "")}</span>
                   </Link>
                 ))}
@@ -139,10 +155,10 @@ export function TodaySection({ compact = false }: { compact?: boolean }) {
             <div>
               <strong className="small">On your plate</strong>
               <div className="stack" style={{ gap: 2, marginTop: 4 }}>
-                {mine.map(({ item, list }) => (
-                  <Link key={item.id} href={`/trips/${tripId}/lists/${list.id}?item=${item.id}`} className="check-row" style={{ textDecoration: "none" }}>
-                    <span aria-hidden>{list.icon}</span>
-                    <span className="grow small">{item.title || "Untitled"} <span className="muted">· {list.name}</span></span>
+                {mine.map((m) => (
+                  <Link key={m.key} href={m.href} className="check-row" style={{ textDecoration: "none" }}>
+                    <span aria-hidden>{m.icon}</span>
+                    <span className="grow small">{m.title} <span className="muted">· {m.sub}</span></span>
                   </Link>
                 ))}
               </div>

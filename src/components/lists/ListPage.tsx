@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Plus, Settings2, Search, ListPlus, Table2, LayoutGrid, Columns3, CalendarDays, Map as MapIcon, CheckSquare } from "lucide-react";
 import { useTrip } from "../TripProvider";
@@ -9,6 +9,7 @@ import { ListItemModal } from "./ItemModal";
 import { ListSettings } from "./ListSettings";
 import { BoardView, CalendarView, CardsView, ChecklistView, MapListView, TableView } from "./Views";
 import { useEngine } from "./engine";
+import { useIsPhone } from "../ui/hooks";
 import { useCommitItem } from "./automation";
 import { itemMoneyTotal, listProgress, statusField, type ListItem } from "@/lib/fields";
 import { dateFields, defaultGroupField, filterItems, groupableFields, placeFields, sortItems } from "@/lib/views";
@@ -23,18 +24,6 @@ const VIEWS: { value: ListViewType; label: string; icon: typeof Table2 }[] = [
   { value: "map", label: "Map", icon: MapIcon },
   { value: "checklist", label: "Checklist", icon: CheckSquare },
 ];
-
-function useIsPhone() {
-  const [phone, setPhone] = useState(false);
-  useEffect(() => {
-    const mq = window.matchMedia("(max-width: 720px)");
-    const on = () => setPhone(mq.matches);
-    on();
-    mq.addEventListener("change", on);
-    return () => mq.removeEventListener("change", on);
-  }, []);
-  return phone;
-}
 
 /** A custom list, shown however each person prefers (their choice is private to them). */
 export function ListPage({ listId }: { listId: string }) {

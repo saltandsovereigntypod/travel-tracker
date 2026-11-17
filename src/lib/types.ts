@@ -248,7 +248,7 @@ export interface Photo {
   created_at: string;
 }
 
-export type CommentEntity = "idea" | "itinerary" | "flight" | "stay" | "expense" | "note" | "photo" | "list_item";
+export type CommentEntity = "idea" | "itinerary" | "flight" | "stay" | "expense" | "note" | "photo" | "list_item" | "page";
 
 export interface Comment {
   id: string;
