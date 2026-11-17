@@ -10,7 +10,7 @@ import { ModuleTitle } from "../ModuleTitle";
 import { Modal } from "../ui/Modal";
 import { Avatar, EmptyState, Field, PlaceSearch, Segmented } from "../ui/Fields";
 import { CostEditor, costColumns, costValueFrom, type CostValue } from "../ui/CostEditor";
-import { CardOptions, useCardParts } from "../ui/CardOptions";
+import { CardOptions, useCardChoice, useCardParts, useSetCardPref } from "../ui/CardOptions";
 import { mapsLink } from "@/lib/services";
 import { ideaTotal } from "./money";
 import { orderForTime, itemsForDay } from "./itinerary-order";
@@ -48,7 +48,11 @@ export function IdeasSection({ compact = false, limit }: { compact?: boolean; li
   const { rows, canEdit, tripId, me, trip, goingIds, householdOf } = useTrip();
   const scores = useIdeaScores();
   const [filter, setFilter] = useState<Filter>("all");
-  const [sort, setSort] = useState<"top" | "new">("top");
+  const show = useCardParts("ideas");
+  const choice = useCardChoice("ideas");
+  const setPref = useSetCardPref("ideas");
+  const sort = choice("sort") as "top" | "new" | "price";
+  const group = choice("group");
   const [category, setCategory] = useState("");
   const [open, setOpen] = useState<{ idea: Idea | "new"; edit: boolean } | null>(null);
   const [scheduling, setScheduling] = useState<Idea | null>(null);
@@ -76,13 +80,34 @@ export function IdeasSection({ compact = false, limit }: { compact?: boolean; li
           : i.status === filter,
     );
     if (category) l = l.filter((i) => i.category === category);
+    const price = (i: Idea) => ideaTotal(i, goingIds, householdOf) ?? Infinity;
     l = [...l].sort((a, b) =>
       sort === "top"
         ? (scores[b.id]?.score ?? 0) - (scores[a.id]?.score ?? 0) || b.created_at.localeCompare(a.created_at)
-        : b.created_at.localeCompare(a.created_at),
+        : sort === "price"
+          ? price(a) - price(b) || b.created_at.localeCompare(a.created_at)
+          : b.created_at.localeCompare(a.created_at),
     );
     return limit ? l.slice(0, limit) : l;
-  }, [rows.ideas, rows.idea_votes, me, filter, category, sort, scores, limit, compact]);
+  }, [rows.ideas, rows.idea_votes, me, filter, category, sort, scores, limit, compact, goingIds, householdOf]);
+
+  // Optional grouping (by category or status), in the order the groups first appear.
+  const groups = useMemo(() => {
+    if (group !== "category" && group !== "status") return null;
+    const out = new Map<string, { title: string; ideas: Idea[] }>();
+    const statusName: Record<string, string> = { open: "New", maybe: "Maybe", planned: "Planned", passed: "Passed" };
+    for (const i of list) {
+      const key = group === "category" ? i.category : i.status;
+      const title = group === "category" ? `${categoryOf(i.category).emoji} ${categoryOf(i.category).label}` : statusName[i.status] ?? i.status;
+      const g = out.get(key) ?? { title, ideas: [] };
+      g.ideas.push(i);
+      out.set(key, g);
+    }
+    return [...out.entries()];
+  }, [group, list]);
+  // Running estimate for what's showing (passed ideas don't count).
+  const running = list.filter((i) => i.status !== "passed").reduce((n, i) => n + (ideaTotal(i, goingIds, householdOf) ?? 0), 0);
+  const priced = list.filter((i) => i.status !== "passed" && ideaTotal(i, goingIds, householdOf) != null).length;
 
   return (
     <div>
@@ -123,7 +148,7 @@ export function IdeasSection({ compact = false, limit }: { compact?: boolean; li
               <option key={c.id} value={c.id}>{c.emoji} {c.label}</option>
             ))}
           </select>
-          <Segmented size="sm" value={sort} onChange={setSort} options={[{ value: "top", label: "Top voted" }, { value: "new", label: "Newest" }]} />
+          <Segmented size="sm" value={sort} onChange={(v) => setPref("sort", v)} options={[{ value: "top", label: "Top voted" }, { value: "new", label: "Newest" }, { value: "price", label: "Cheapest" }]} />
           <CardOptions kind="ideas" title="Idea cards" />
         </div>
       )}
@@ -137,11 +162,25 @@ export function IdeasSection({ compact = false, limit }: { compact?: boolean; li
           {rows.ideas.length ? "Try a different filter." : "Restaurants, tours, shops, that one bookstore… drop it all here."}
         </EmptyState>
       ) : (
-        <div className="grid-cards" style={compact ? { gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))" } : undefined}>
-          {list.map((idea) => (
-            <IdeaCard key={idea.id} idea={idea} compact={compact} onOpen={() => setOpen({ idea, edit: false })} onSchedule={() => setScheduling(idea)} />
+        <>
+          {show("total") && priced > 0 && (
+            <div className="running-total">
+              <span className="tiny muted">Running estimate</span>
+              <strong>≈ {formatMoney(running, trip?.currency)}</strong>
+              <span className="tiny muted">for {priced} idea{priced === 1 ? "" : "s"} with a price, for everyone going</span>
+            </div>
+          )}
+          {(groups ?? [["", { title: "", ideas: list }] as const]).map(([key, g]) => (
+            <div key={key || "all"} className="card-group">
+              {g.title && <h3 className="card-group-title">{g.title} <span className="tiny muted">{g.ideas.length}</span></h3>}
+              <div className="grid-cards" style={compact ? { gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))" } : undefined}>
+                {g.ideas.map((idea) => (
+                  <IdeaCard key={idea.id} idea={idea} compact={compact} onOpen={() => setOpen({ idea, edit: false })} onSchedule={() => setScheduling(idea)} />
+                ))}
+              </div>
+            </div>
           ))}
-        </div>
+        </>
       )}
       {compact && (
         <div className="row" style={{ marginTop: "0.8rem" }}>
@@ -170,7 +209,7 @@ function IdeaCard({ idea, compact, onOpen, onSchedule }: { idea: Idea; compact?:
 
   return (
     <article className={clsx("card idea-card card-hover", `status-${idea.status}`)}>
-      {!compact && show("photo") && (
+      {show("photo") && (
         <button
           className={clsx("idea-img", !idea.image_url && "noimg")}
           onClick={onEdit}
@@ -184,7 +223,7 @@ function IdeaCard({ idea, compact, onOpen, onSchedule }: { idea: Idea; compact?:
         <div className="row-between" style={{ alignItems: "flex-start" }}>
           <button onClick={onEdit} style={{ all: "unset", cursor: "pointer" }}>
             <h3>
-              {compact || !show("photo") ? <span style={{ marginRight: 6 }}>{cat.emoji}</span> : !idea.image_url && <span className="show-phone" style={{ marginRight: 6 }}>{cat.emoji}</span>}
+              {!show("photo") ? <span style={{ marginRight: 6 }}>{cat.emoji}</span> : !idea.image_url && <span className="show-phone" style={{ marginRight: 6 }}>{cat.emoji}</span>}
               {idea.title}
             </h3>
           </button>
@@ -192,16 +231,16 @@ function IdeaCard({ idea, compact, onOpen, onSchedule }: { idea: Idea; compact?:
           {idea.status === "maybe" && <span className="chip chip-2">Maybe</span>}
           {idea.status !== "planned" && everyoneIn && <span className="chip badge-in"><Check size={12} /> Everyone&apos;s in</span>}
         </div>
-        {!compact && show("about") && idea.description && <p className="muted small" style={{ display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{idea.description}</p>}
+        {show("about") && idea.description && <p className="muted small" style={{ display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{idea.description}</p>}
         <div className="chip-row">
-          {!compact && show("category") && <span className="chip">{cat.emoji} {cat.label}</span>}
+          {show("category") && <span className="chip">{cat.emoji} {cat.label}</span>}
           {show("price") && idea.est_cost != null && (
             <span className="chip chip-muted" title={`${formatMoney(idea.est_cost, trip?.currency)} ${unitLabel(pickCost(idea))}`}>
               {formatMoney(idea.est_cost, trip?.currency)} {idea.cost_unit !== "group" && unitLabel(pickCost(idea))}
               {total != null && idea.cost_unit !== "group" && <> · ≈{formatMoney(total, trip?.currency, true)}</>}
             </span>
           )}
-          {show("place") && idea.location?.name && !compact && <span className="chip chip-muted"><MapPin size={12} /> {idea.location.name}</span>}
+          {show("place") && idea.location?.name && <span className="chip chip-muted"><MapPin size={12} /> {idea.location.name}</span>}
           {show("link") && idea.url && (
             <a className="chip chip-2" href={idea.url} target="_blank" rel="noopener noreferrer">
               <ExternalLink size={12} /> {hostname(idea.url)}
@@ -214,7 +253,7 @@ function IdeaCard({ idea, compact, onOpen, onSchedule }: { idea: Idea; compact?:
             {voters.map((u) => nameOf(u).split(" ")[0]).join(", ")} 👍
           </span>
         )}
-        {!compact && show("addedBy") && (
+        {show("addedBy") && (
           <span className="row tiny muted" style={{ marginTop: "auto" }}>
             <Avatar name={nameOf(idea.created_by)} color={colorOf(idea.created_by)} size={18} /> Added by {nameOf(idea.created_by)}
           </span>

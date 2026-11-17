@@ -38,6 +38,7 @@ export function BudgetSection({ compact = false }: { compact?: boolean }) {
   const money = useMoney();
   const travel = useTravel();
   const show = useCardParts("expenses");
+  const blockShow = useCardParts("budget");
   const { cur, spent, committedTotal, stillToPay, wishlist, budget, remainingBudget, received, expectedIncome, incomeThings } = money;
   const [editing, setEditing] = useState<Expense | "new" | null>(null);
   const [preset, setPreset] = useState<ExpensePreset | null>(null);
@@ -106,25 +107,41 @@ export function BudgetSection({ compact = false }: { compact?: boolean }) {
     const myBal = combine && hasHouseholds ? grouped[partyOf(me)] ?? 0 : balances[me] ?? 0;
     return (
       <div className="stack">
-        <div className="row-between">
-          <div>
-            <div className="tiny muted">Spent</div>
-            <strong className="heading" style={{ fontSize: "1.6rem" }}>{formatMoney(spent, cur)}</strong>
+        {(blockShow("spent") || blockShow("toPay")) && (
+          <div className="row-between">
+            {blockShow("spent") && (
+              <div>
+                <div className="tiny muted">Spent</div>
+                <strong className="heading" style={{ fontSize: "1.6rem" }}>{formatMoney(spent, cur)}</strong>
+              </div>
+            )}
+            {blockShow("toPay") && (
+              <div style={{ textAlign: "right" }}>
+                <div className="tiny muted">Still to pay</div>
+                <strong>{formatMoney(stillToPay, cur)}</strong>
+              </div>
+            )}
           </div>
-          <div style={{ textAlign: "right" }}>
-            <div className="tiny muted">Still to pay</div>
-            <strong>{formatMoney(stillToPay, cur)}</strong>
+        )}
+        {blockShow("bar") && budget > 0 && <div className="progress"><span style={{ width: `${pct}%` }} /></div>}
+        {blockShow("notBooked") && travel.estimated > 0 && (
+          <p className="small">
+            Not booked yet: <strong>≈ {formatMoney(travel.estimated, cur)}</strong>
+            {travel.remainingIfBooked != null && <span className="muted"> ({travel.remainingIfBooked >= 0 ? `${formatMoney(travel.remainingIfBooked, cur)} left after` : `${formatMoney(-travel.remainingIfBooked, cur)} over after`})</span>}
+          </p>
+        )}
+        {blockShow("balance") && (
+          <p className="small">
+            {Math.abs(myBal) < 0.01 ? "You're all square. 🙌" : myBal > 0 ? `You're owed ${formatMoney(myBal, cur)}.` : `You owe ${formatMoney(-myBal, cur)}.`}
+            {myShareLeft > 0.01 && <span className="muted"> Your share still to pay: {formatMoney(myShareLeft, cur)}.</span>}
+          </p>
+        )}
+        {blockShow("buttons") && (
+          <div className="row">
+            {canEdit && <button className="btn btn-sm" onClick={() => openNew()}><Plus size={14} /> Add expense</button>}
+            <Link className="btn btn-sm btn-ghost" href={`/trips/${tripId}/budget`}>Details →</Link>
           </div>
-        </div>
-        {budget > 0 && <div className="progress"><span style={{ width: `${pct}%` }} /></div>}
-        <p className="small">
-          {Math.abs(myBal) < 0.01 ? "You're all square. 🙌" : myBal > 0 ? `You're owed ${formatMoney(myBal, cur)}.` : `You owe ${formatMoney(-myBal, cur)}.`}
-          {myShareLeft > 0.01 && <span className="muted"> Your share still to pay: {formatMoney(myShareLeft, cur)}.</span>}
-        </p>
-        <div className="row">
-          {canEdit && <button className="btn btn-sm" onClick={() => openNew()}><Plus size={14} /> Add expense</button>}
-          <Link className="btn btn-sm btn-ghost" href={`/trips/${tripId}/budget`}>Details →</Link>
-        </div>
+        )}
         <ExpenseModal expense={editing} preset={preset} onClose={() => setEditing(null)} />
       </div>
     );

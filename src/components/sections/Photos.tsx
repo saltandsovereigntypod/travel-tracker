@@ -11,6 +11,7 @@ import { EmptyState, Field, Segmented } from "../ui/Fields";
 import { useToast } from "../ui/Toast";
 import { CommentThread } from "./Comments";
 import { AttachPicker, AttachedChip, VisibilityControl } from "../memories/Memories";
+import { CardOptions, useCardChoice, useCardParts, useSetCardPref } from "../ui/CardOptions";
 import { friendlyError, supabase } from "@/lib/supabase";
 import { formatDay, formatDayLong, todayString } from "@/lib/format";
 import { canSee, groupPhotos, matchPlan, photoDay, type PhotoGrouping } from "@/lib/memories";
@@ -103,8 +104,14 @@ export function PhotosSection({ compact = false, limit }: { compact?: boolean; l
   const { upload, busy } = usePhotoUpload();
   const [over, setOver] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
-  const [fav, setFav] = useState(false);
-  const [view, setView] = useState<View>("all");
+  const choice = useCardChoice("photos");
+  const setPref = useSetCardPref("photos");
+  const showPart = useCardParts("photos");
+  const fav = choice("show") === "fav";
+  const grouping = choice("group");
+  const view: View = grouping === "none" ? "all" : (grouping as View);
+  const setView = (v: View) => setPref("group", v === "all" ? "none" : v);
+  const setFav = (f: (x: boolean) => boolean) => setPref("show", f(fav) ? "fav" : "all");
   const input = useRef<HTMLInputElement>(null);
 
   // Opened from a plan or stay ("Photos & notes").
@@ -141,6 +148,7 @@ export function PhotosSection({ compact = false, limit }: { compact?: boolean; l
             <Loader2 className="spin" style={{ margin: "auto" }} />
           )}
           {p.favorite && <Heart className="fav" size={18} fill="currentColor" />}
+          {showPart("captions") && p.caption && <span className="photo-caption">{p.caption}</span>}
           {p.visibility && p.visibility !== "everyone" && <span className="photo-lock" title="Not everyone can see this">{p.visibility === "private" ? <Lock size={12} /> : <Users size={12} />}</span>}
         </button>
       ))}
@@ -176,6 +184,7 @@ export function PhotosSection({ compact = false, limit }: { compact?: boolean; l
             ]}
           />
           <button className={clsx("btn btn-sm", fav && "btn-primary")} onClick={() => setFav((f) => !f)}><Heart size={14} /> Favorites</button>
+          <CardOptions kind="photos" title="Photo options" />
         </div>
       )}
       {canEdit && !compact && (

@@ -1114,3 +1114,11 @@ input[type="checkbox"].switch:checked { background: var(--accent); }
   .sb-page:last-child { break-after: auto; page-break-after: auto; }
   .sb-photo, .sb-entry, .sb-note, .sb-plans li, .sb-collage { break-inside: avoid; }
 }
+.card-opt-btn { width: 30px; height: 30px; color: var(--muted); }
+.card-opt-btn:hover { color: var(--accent); }
+@media (max-width: 720px) { .card-opt-label { display: inline; } }
+.running-total { display: flex; align-items: baseline; flex-wrap: wrap; gap: 0.4rem 0.7rem; padding: 0.65rem 0.9rem; border-radius: 12px; background: var(--soft); margin-bottom: 0.9rem; }
+.running-total strong { font-size: 1.15rem; }
+.card-group + .card-group { margin-top: 1.3rem; }
+.card-group-title { font-size: 1rem; margin-bottom: 0.6rem; display: flex; align-items: baseline; gap: 0.4rem; }
+.photo-caption { position: absolute; left: 0; right: 0; bottom: 0; padding: 14px 8px 6px; font-size: 0.75rem; color: #fff; text-align: left; background: linear-gradient(transparent, rgba(0,0,0,.6)); }

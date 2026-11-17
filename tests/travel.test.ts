@@ -124,3 +124,30 @@ describe("where to stay", () => {
     expect(links[1].href).toContain("latitude=42.51950");
   });
 });
+
+describe("grouping flights", () => {
+  const fl = [
+    flight({ id: "1", from_code: "LAX", to_code: "BOS", depart_local: "2027-10-20T07:00", travelers: ["ash", "dan"] }),
+    flight({ id: "2", from_code: "SFO", to_code: "BOS", depart_local: "2027-10-21T07:00", travelers: ["liz"] }),
+    flight({ id: "3", from_code: "BOS", to_code: "LAX", depart_local: "2027-11-02T09:00", travelers: ["ash", "dan"] }),
+    flight({ id: "4", from_code: "BOS", to_code: "PHL", depart_local: "2027-10-25T09:00", travelers: [] }),
+  ];
+  it("splits out and return", async () => {
+    const { flightLegs, groupFlights } = await import("@/lib/travel");
+    expect(flightLegs(fl)).toEqual({ "1": "out", "2": "out", "3": "return", "4": "during" });
+    expect(groupFlights(fl, "direction", (x) => x).map((g) => [g.title, g.flights.map((f) => f.id)])).toEqual([
+      ["Flights out", ["1", "2"]],
+      ["During the trip", ["4"]],
+      ["Flights home", ["3"]],
+    ]);
+  });
+  it("groups by person, a shared flight under each", async () => {
+    const { groupFlights } = await import("@/lib/travel");
+    expect(groupFlights(fl, "person", (x) => x.toUpperCase()).map((g) => [g.title, g.flights.map((f) => f.id)])).toEqual([
+      ["ASH", ["1", "3"]],
+      ["DAN", ["1", "3"]],
+      ["LIZ", ["2"]],
+      ["Nobody added yet", ["4"]],
+    ]);
+  });
+});
