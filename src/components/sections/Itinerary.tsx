@@ -10,7 +10,13 @@ import { Plus, Plane, BedDouble, MapPin, ExternalLink, Trash2, CalendarDays, Clo
 import clsx from "clsx";
 import { useTrip } from "../TripProvider";
 import { Modal } from "../ui/Modal";
-import { EmptyState, Field, PlaceSearch, Segmented } from "../ui/Fields";
+import { EmptyState, Field, PersonPicker, PlaceSearch, Segmented } from "../ui/Fields";
+import { CostEditor, costColumns, costValueFrom, type CostValue } from "../ui/CostEditor";
+import { PaymentPanel, PayStatus } from "./Payments";
+import { ScheduleModal, useIdeaScores, useScheduleIdea } from "./Ideas";
+import { Lightbulb, ThumbsUp } from "lucide-react";
+import type { Idea } from "@/lib/types";
+import { useMoney } from "./money";
 import { CommentThread, useCommentCount } from "./Comments";
 import { CATEGORIES, categoryOf } from "@/lib/categories";
 import { formatDay, formatMoney, formatTime, normalizeUrl, splitLocal, todayString, tripDays } from "@/lib/format";
@@ -63,6 +69,10 @@ export function ItinerarySection({ compact = false }: { compact?: boolean }) {
   const [layout, setLayout] = useState<"list" | "board">("list");
   const [editing, setEditing] = useState<ItineraryItem | { day: string | null } | null>(null);
   const [dragging, setDragging] = useState<ItineraryItem | null>(null);
+  const [draggingIdea, setDraggingIdea] = useState<Idea | null>(null);
+  const [showTray, setShowTray] = useState(true);
+  const [ideasOpen, setIdeasOpen] = useState(false);
+  const scheduleIdea = useScheduleIdea();
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(TouchSensor, { activationConstraint: { delay: 220, tolerance: 6 } }),
@@ -85,13 +95,27 @@ export function ItinerarySection({ compact = false }: { compact?: boolean }) {
     : allDays;
 
   function onDragStart(e: DragStartEvent) {
-    setDragging(rows.itinerary_items.find((i) => i.id === e.active.id) ?? null);
+    const id = String(e.active.id);
+    if (id.startsWith("idea:")) setDraggingIdea(rows.ideas.find((i) => `idea:${i.id}` === id) ?? null);
+    else setDragging(rows.itinerary_items.find((i) => i.id === e.active.id) ?? null);
   }
 
   function onDragEnd(e: DragEndEvent) {
     setDragging(null);
-    const item = rows.itinerary_items.find((i) => i.id === e.active.id);
+    setDraggingIdea(null);
     const overId = e.over?.id ? String(e.over.id) : null;
+    // An idea dropped from the tray becomes a plan on that day.
+    const activeId = String(e.active.id);
+    if (activeId.startsWith("idea:")) {
+      const idea = rows.ideas.find((i) => `idea:${i.id}` === activeId);
+      if (!idea || !overId) return;
+      const day = overId.startsWith("day:")
+        ? (overId.slice(4) === UNSCHEDULED ? null : overId.slice(4))
+        : rows.itinerary_items.find((i) => `item:${i.id}` === overId)?.day ?? null;
+      void scheduleIdea(idea, day, null);
+      return;
+    }
+    const item = rows.itinerary_items.find((i) => i.id === e.active.id);
     if (!item || !overId) return;
     if (overId.startsWith("day:")) {
       const raw = overId.slice(4);
@@ -118,10 +142,24 @@ export function ItinerarySection({ compact = false }: { compact?: boolean }) {
         <div className="section-head">
           <div>
             <h1>Itinerary</h1>
-            <p>Drag plans between days. Flights and stays appear on their dates automatically.</p>
+            <p>
+              <span className="hide-phone">Drag plans between days. </span>
+              <span className="show-phone">Tap a plan to edit it or change its day. </span>
+              Flights and stays appear on their dates automatically.
+            </p>
           </div>
           <div className="toolbar">
-            <Segmented size="sm" value={layout} onChange={setLayout} options={[{ value: "list", label: "Days" }, { value: "board", label: "Columns" }]} />
+            <span className="hide-phone"><Segmented size="sm" value={layout} onChange={setLayout} options={[{ value: "list", label: "Days" }, { value: "board", label: "Columns" }]} /></span>
+            {canEdit && (
+              <button className="btn btn-sm show-tablet" onClick={() => setIdeasOpen(true)}>
+                <Lightbulb size={14} /> Ideas
+              </button>
+            )}
+            {canEdit && (
+              <button className={clsx("btn btn-sm hide-tablet", showTray && "btn-primary")} onClick={() => setShowTray((t) => !t)} title="Drag ideas onto days">
+                <Lightbulb size={14} /> Ideas
+              </button>
+            )}
             {canEdit && (
               <button className="btn btn-primary" onClick={() => setEditing({ day: null })}>
                 <Plus size={16} /> Add plan
@@ -140,12 +178,28 @@ export function ItinerarySection({ compact = false }: { compact?: boolean }) {
         </div>
       )}
 
+      {!compact && days.length > 3 && (
+        <nav className="day-jump" aria-label="Jump to day">
+          {days.map((d, i) => (
+            <button
+              key={d}
+              className={clsx(d === today && "today")}
+              onClick={() => document.getElementById(`day-${d}`)?.scrollIntoView({ behavior: "smooth", block: "start" })}
+            >
+              {formatDay(d, { weekday: "short", month: undefined, day: undefined })} {formatDay(d, { weekday: undefined, month: undefined })}
+              <small>Day {i + 1}</small>
+            </button>
+          ))}
+        </nav>
+      )}
+
       {compact && visibleDays.length === 0 && unscheduled.length === 0 ? (
         <EmptyState icon={<CalendarDays />} title="Nothing planned yet">
           <Link href={`/trips/${tripId}/itinerary`} style={{ color: "var(--accent)" }}>Open the itinerary</Link>
         </EmptyState>
       ) : (
         <DndContext sensors={sensors} onDragStart={onDragStart} onDragEnd={onDragEnd} onDragCancel={() => setDragging(null)}>
+          <div className={!compact && canEdit && showTray ? "itin-with-tray" : undefined}>
           <div className={layout === "board" && !compact ? "itin-board" : "itin-list"}>
             {visibleDays.map((d) => (
               <DayColumn
@@ -164,13 +218,21 @@ export function ItinerarySection({ compact = false }: { compact?: boolean }) {
               <DayColumn day={null} index={-1} items={unscheduled} fixed={[]} compact={compact} onOpen={setEditing} onAdd={() => setEditing({ day: null })} />
             )}
           </div>
-          <DragOverlay>{dragging && <ItemRow item={dragging} overlay />}</DragOverlay>
+          {!compact && canEdit && showTray && <IdeasTray />}
+          </div>
+          <DragOverlay>
+            {dragging && <ItemRow item={dragging} overlay />}
+            {draggingIdea && <div className="tray-idea" style={{ boxShadow: "var(--shadow-lg)" }}>{categoryOf(draggingIdea.category).emoji} {draggingIdea.title}</div>}
+          </DragOverlay>
         </DndContext>
       )}
       {compact && (
         <Link className="btn btn-sm btn-ghost" style={{ marginTop: "0.6rem" }} href={`/trips/${tripId}/itinerary`}>Full itinerary →</Link>
       )}
       <ItemModal target={editing} onClose={() => setEditing(null)} />
+      <Modal open={ideasOpen} onClose={() => setIdeasOpen(false)} title="Schedule an idea">
+        <IdeasTray bare />
+      </Modal>
     </div>
   );
 }
@@ -206,7 +268,7 @@ function DayColumn({
   ];
 
   return (
-    <section className={clsx("card day-col", compact && "card-tight")} style={isToday ? { outline: "2px solid var(--accent)" } : undefined}>
+    <section id={day ? `day-${day}` : "day-unscheduled"} className={clsx("card day-col", compact && "card-tight")} style={isToday ? { outline: "2px solid var(--accent)" } : undefined}>
       <div className="day-head">
         <div>
           <div className="day-num">{day ? (index >= 0 ? `Day ${index + 1}` : "Outside trip dates") : "Unscheduled"}{isToday && " · Today"}</div>
@@ -251,6 +313,8 @@ function DayColumn({
 
 function ItemRow({ item, onOpen, draggable, overlay }: { item: ItineraryItem; onOpen?: () => void; draggable?: boolean; overlay?: boolean }) {
   const { trip } = useTrip();
+  const money = useMoney();
+  const costed = money.byKey[`itinerary:${item.id}`];
   const drag = useDraggable({ id: item.id, disabled: !draggable || overlay });
   const drop = useDroppable({ id: `item:${item.id}`, disabled: overlay });
   const cat = categoryOf(item.category);
@@ -279,7 +343,8 @@ function ItemRow({ item, onOpen, draggable, overlay }: { item: ItineraryItem; on
         <strong style={{ display: "block" }}>{item.title}</strong>
         <div className="row tiny muted wrap" style={{ gap: "0.5rem" }}>
           {item.location?.name && <span className="row" style={{ gap: 2 }}><MapPin size={11} />{item.location.name}</span>}
-          {item.cost != null && <span>{formatMoney(item.cost, trip?.currency)}</span>}
+          {costed?.total != null && <span>{formatMoney(costed.total, trip?.currency)}</span>}
+          {costed && costed.status !== "none" && costed.status !== "unpaid" && <PayStatus thing={costed} />}
           {comments > 0 && <span className="row" style={{ gap: 2 }}><MessageCircle size={11} />{comments}</span>}
         </div>
       </div>
@@ -287,10 +352,13 @@ function ItemRow({ item, onOpen, draggable, overlay }: { item: ItineraryItem; on
   );
 }
 
-const blank = { title: "", day: "", start_time: "", end_time: "", category: "activity", location: {} as Place, url: "", cost: "", notes: "" };
+const blank = {
+  title: "", day: "", start_time: "", end_time: "", category: "activity", location: {} as Place, url: "", notes: "",
+  cost: costValueFrom(null, null, "person") as CostValue, participants: [] as string[],
+};
 
 function ItemModal({ target, onClose }: { target: ItineraryItem | { day: string | null } | null; onClose: () => void }) {
-  const { trip, rows, insert, update, remove, canEdit } = useTrip();
+  const { trip, rows, insert, update, remove, canEdit, goingIds, nameOf, colorOf, householdOf } = useTrip();
   const existing = target && "id" in target ? target : null;
   const days = tripDays(trip?.start_date ?? null, trip?.end_date ?? null);
   const [form, setForm] = useState(blank);
@@ -306,11 +374,12 @@ function ItemModal({ target, onClose }: { target: ItineraryItem | { day: string 
         category: existing.category,
         location: existing.location ?? {},
         url: existing.url ?? "",
-        cost: existing.cost?.toString() ?? "",
+        cost: costValueFrom(existing.cost, existing),
         notes: existing.notes,
+        participants: existing.participants?.length ? existing.participants : goingIds,
       });
     } else if (target) {
-      setForm({ ...blank, day: (target as { day: string | null }).day ?? "" });
+      setForm({ ...blank, day: (target as { day: string | null }).day ?? "", participants: goingIds });
     }
   }
   const set = <K extends keyof typeof form>(k: K, v: (typeof form)[K]) => setForm((f) => ({ ...f, [k]: v }));
@@ -328,8 +397,10 @@ function ItemModal({ target, onClose }: { target: ItineraryItem | { day: string 
       category: form.category,
       location: form.location,
       url: normalizeUrl(form.url),
-      cost: form.cost === "" ? null : Number(form.cost),
+      ...costColumns(form.cost),
       notes: form.notes,
+      // Store "everyone going" as an empty list so new travelers are included automatically.
+      participants: sameSet(form.participants, goingIds) ? [] : form.participants,
     };
     const dayItems = itemsForDay(rows.itinerary_items, day);
     let ok: boolean;
@@ -401,10 +472,11 @@ function ItemModal({ target, onClose }: { target: ItineraryItem | { day: string 
             <Field label="Where" full>
               <PlaceSearch value={form.location} onChange={(p) => set("location", p)} near={near} />
             </Field>
-            <Field label={`Cost (${trip?.currency ?? "USD"})`}>
-              <input className="input" type="number" min="0" step="0.01" value={form.cost} onChange={(e) => set("cost", e.target.value)} />
+            <Field label="Who's doing this" hint="Everyone going is selected by default. Costs and splits follow this." full>
+              <PersonPicker people={rows.trip_members.map((m) => m.user_id)} value={form.participants} onChange={(v) => set("participants", v)} nameOf={nameOf} colorOf={colorOf} />
             </Field>
-            <Field label="Link / tickets">
+            <CostEditor value={form.cost} onChange={(v) => set("cost", v)} participants={form.participants} currency={trip?.currency ?? "USD"} householdOf={householdOf} />
+            <Field label="Link / tickets" full>
               <input className="input" value={form.url} onChange={(e) => set("url", e.target.value)} placeholder="Optional" />
             </Field>
             <Field label="Notes" full>
@@ -419,12 +491,61 @@ function ItemModal({ target, onClose }: { target: ItineraryItem | { day: string 
           )}
         </form>
         {existing && (
-          <div>
-            <h3 style={{ marginBottom: "0.8rem" }} className="row"><Clock size={16} /> Comments</h3>
+          <div className="stack">
+            <PaymentPanel type="itinerary" id={existing.id} category="activities" />
+            <h3 style={{ marginTop: "0.4rem" }} className="row"><Clock size={16} /> Comments</h3>
             <CommentThread entity="itinerary" id={existing.id} />
           </div>
         )}
       </div>
     </Modal>
+  );
+}
+
+function sameSet(a: string[], b: string[]) {
+  return a.length === b.length && a.every((x) => b.includes(x));
+}
+
+/** Unscheduled ideas, most-wanted first. Drag one onto a day, or tap to pick a day. */
+function IdeasTray({ bare = false }: { bare?: boolean }) {
+  const { rows } = useTrip();
+  const scores = useIdeaScores();
+  const [picking, setPicking] = useState<Idea | null>(null);
+  const ideas = rows.ideas
+    .filter((i) => i.status === "open" || i.status === "maybe")
+    .sort((a, b) => (scores[b.id]?.score ?? 0) - (scores[a.id]?.score ?? 0));
+  return (
+    <aside className={bare ? "stack" : "card ideas-tray"} style={bare ? { gap: "0.5rem" } : undefined} aria-label="Ideas to schedule">
+      {!bare && (
+        <div>
+          <h3 className="row"><Lightbulb size={16} /> Ideas</h3>
+          <p className="tiny muted">Drag onto a day, or tap to choose one.</p>
+        </div>
+      )}
+      {bare && <p className="small muted">Most-wanted first. Tap one to pick its day.</p>}
+      {ideas.length === 0 && <p className="small muted">Nothing waiting. Add ideas on the Ideas page.</p>}
+      {ideas.map((i) => <TrayIdea key={i.id} idea={i} up={scores[i.id]?.up ?? 0} onTap={() => setPicking(i)} />)}
+      <ScheduleModal idea={picking} onClose={() => setPicking(null)} />
+    </aside>
+  );
+}
+
+function TrayIdea({ idea, up, onTap }: { idea: Idea; up: number; onTap: () => void }) {
+  const { setNodeRef, attributes, listeners, isDragging } = useDraggable({ id: `idea:${idea.id}` });
+  return (
+    <div
+      ref={setNodeRef}
+      {...attributes}
+      {...listeners}
+      className="tray-idea"
+      style={{ opacity: isDragging ? 0.4 : 1 }}
+      onClick={onTap}
+      role="button"
+      tabIndex={0}
+    >
+      <span>{categoryOf(idea.category).emoji}</span>
+      <span className="grow">{idea.title}</span>
+      {up > 0 && <span className="tiny muted row" style={{ gap: 2 }}><ThumbsUp size={11} />{up}</span>}
+    </div>
   );
 }

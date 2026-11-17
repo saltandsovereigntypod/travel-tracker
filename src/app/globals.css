@@ -576,3 +576,89 @@ input[type="checkbox"] { accent-color: var(--accent); width: 18px; height: 18px;
 .font-grid button { text-align: left; padding: 0.4rem 0.6rem; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); cursor: pointer; color: var(--ink); font-size: 1rem; }
 .font-grid button.on { border-color: var(--accent); background: var(--soft); }
 .block-inner .hero-block { height: 100%; }
+.legal h2 { font-size: 1.15rem; margin: 1.6rem 0 0.5rem; }
+.legal p, .legal li { line-height: 1.65; }
+.legal ul { list-style: disc; padding-left: 1.2rem; margin: 0.4rem 0; display: flex; flex-direction: column; gap: 0.35rem; }
+.legal a { color: var(--accent); }
+
+/* Cost editor, payments and split editor */
+.cost-row { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
+.cost-row > .input:first-child { width: 120px; flex: none; }
+.cost-row > select.input { width: auto; flex: 1 1 160px; }
+.cost-inline { display: inline-flex; align-items: center; gap: 0.35rem; font-size: 0.85rem; color: var(--muted); }
+.cost-inline .input { width: 80px; }
+.cost-summary { font-size: 0.85rem; font-weight: 600; color: var(--accent2); background: var(--soft2); padding: 0.35rem 0.6rem; border-radius: 8px; align-self: flex-start; }
+.pay-status { display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.75rem; font-weight: 700; padding: 0.15rem 0.55rem; border-radius: 999px; white-space: nowrap; }
+.pay-unpaid { background: color-mix(in srgb, var(--accent) 14%, var(--surface)); color: color-mix(in srgb, var(--accent) 80%, var(--ink)); }
+.pay-deposit { background: color-mix(in srgb, #E9C46A 30%, var(--surface)); color: color-mix(in srgb, #8a6d00 85%, var(--ink)); }
+.pay-paid { background: color-mix(in srgb, var(--success) 15%, var(--surface)); color: var(--success); }
+.pay-panel { border: 1px solid var(--border); border-radius: 12px; padding: 0.8rem; display: flex; flex-direction: column; gap: 0.6rem; }
+.split-grid { display: grid; grid-template-columns: 1fr 110px; gap: 0.4rem 0.6rem; align-items: center; }
+.split-grid .input { min-height: 36px; }
+.vote-big { min-height: 34px; padding: 0.3rem 0.8rem; font-size: 0.9rem; }
+.voters { display: flex; align-items: center; gap: 0.3rem; font-size: 0.75rem; color: var(--muted); }
+.badge-in { background: color-mix(in srgb, var(--success) 16%, var(--surface)); color: var(--success); }
+.day-chips { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+.day-chips button { border: 1px solid var(--border); background: var(--surface); color: var(--ink); border-radius: 10px; padding: 0.4rem 0.6rem; cursor: pointer; font: 600 0.82rem var(--font-body); display: flex; flex-direction: column; align-items: center; min-width: 64px; }
+.day-chips button small { font-weight: 500; color: var(--muted); font-size: 0.7rem; }
+.day-chips button.on { border-color: var(--accent); background: var(--soft); color: var(--accent); }
+.itin-with-tray { display: grid; grid-template-columns: minmax(0, 1fr) 290px; gap: 1rem; align-items: start; }
+.ideas-tray { position: sticky; top: 72px; max-height: calc(100dvh - 100px); overflow: auto; display: flex; flex-direction: column; gap: 0.5rem; }
+.tray-idea { display: flex; gap: 0.5rem; align-items: center; padding: 0.55rem 0.65rem; border-radius: 10px; border: 1px dashed var(--accent); background: var(--surface); cursor: grab; touch-action: none; font-size: 0.88rem; }
+.tray-idea:active { cursor: grabbing; }
+@media (max-width: 1100px) { .itin-with-tray { grid-template-columns: 1fr; } .ideas-tray { display: none; } }
+@media (max-width: 1100px) { .hide-tablet { display: none; } }
+
+/* ---------------------------------------------------------------- phones */
+.show-phone { display: none; }
+.day-jump { display: flex; gap: 0.35rem; overflow-x: auto; padding: 0.2rem 0 0.6rem; margin-bottom: 0.4rem; scrollbar-width: none; position: sticky; top: 57px; z-index: 5; background: linear-gradient(var(--bg) 70%, transparent); }
+.day-jump::-webkit-scrollbar { display: none; }
+.day-jump button { flex: none; border: 1px solid var(--border); background: var(--surface); color: var(--ink); border-radius: 10px; padding: 0.3rem 0.55rem; font: 600 0.8rem var(--font-body); cursor: pointer; display: flex; flex-direction: column; align-items: center; min-width: 52px; }
+.day-jump button small { font-weight: 500; font-size: 0.68rem; color: var(--muted); }
+.day-jump button.today { border-color: var(--accent); color: var(--accent); }
+.install-bar { display: flex; align-items: center; gap: 0.7rem; padding: 0.7rem 0.9rem; border-radius: 14px; background: var(--soft); border: 1px solid var(--border); margin-bottom: 1rem; font-size: 0.88rem; }
+.install-bar img { width: 36px; height: 36px; border-radius: 10px; flex: none; }
+@media (max-width: 720px) {
+  .show-phone { display: revert; }
+  .hide-phone { display: none !important; }
+  /* 16px stops iPhones zooming into fields when you tap them. */
+  .input, select.input, textarea.input { font-size: 16px; min-height: 44px; }
+  .btn { min-height: 44px; }
+  .btn-sm { min-height: 38px; padding: 0 0.8rem; }
+  .icon-btn { width: 40px; height: 40px; }
+  .vote-btn { min-height: 38px; padding: 0.35rem 0.85rem; }
+  .chip-toggle { min-height: 36px; }
+  .check-row { min-height: 46px; }
+  .segmented { flex-wrap: nowrap; overflow-x: auto; max-width: 100%; scrollbar-width: none; }
+  .segmented::-webkit-scrollbar { display: none; }
+  .segmented button { min-height: 36px; white-space: nowrap; }
+  .section-head { margin-bottom: 0.8rem; }
+  .section-head h1 { font-size: 1.9rem; }
+  .toolbar { width: 100%; }
+  .idea-img.noimg { display: none; }
+  .idea-img { aspect-ratio: auto; height: 140px; }
+  .grid-cards { grid-template-columns: 1fr; gap: 0.75rem; }
+  .main { padding-left: 0.85rem; padding-right: 0.85rem; }
+  .card { padding: 0.95rem; }
+  .itin-time { min-width: 54px; }
+  .modal-body { padding-left: 1rem; padding-right: 1rem; }
+  .modal-foot { padding-bottom: calc(0.8rem + env(safe-area-inset-bottom)); }
+  .modal-foot .btn { flex: 1 1 auto; }
+  .stat strong { font-size: 1.35rem; }
+  .pass-code { font-size: 1.5rem; }
+}
+/* Installed app: keep the top bar clear of the iPhone notch / status bar. */
+@media (display-mode: standalone) {
+  .topbar { padding-top: calc(0.6rem + env(safe-area-inset-top)); }
+}
+.show-tablet { display: none; }
+@media (max-width: 1100px) { .show-tablet { display: inline-flex; } }
+.day-col { scroll-margin-top: 130px; }
+@media (display-mode: standalone) {
+  .landing, .auth-wrap { padding-top: calc(1.5rem + env(safe-area-inset-top)); }
+}
+@media (max-width: 720px) {
+  .block-title a { padding: 0.55rem 0.4rem; margin: -0.55rem -0.4rem; }
+  .color-dot-btn { width: 30px !important; height: 30px !important; border-radius: 15px !important; }
+  .maplibregl-ctrl-group button { width: 38px !important; height: 38px !important; }
+}

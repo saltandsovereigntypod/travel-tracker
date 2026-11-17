@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Plus, CalendarDays, MapPin, Loader2 } from "lucide-react";
 import { RequireAuth, TopBar } from "@/components/AppChrome";
+import { InstallPrompt } from "@/components/InstallPrompt";
 import { useAuth } from "@/components/AuthProvider";
 import { Modal } from "@/components/ui/Modal";
 import { EmptyState, Field } from "@/components/ui/Fields";
@@ -20,6 +21,16 @@ function TripsInner() {
   const { user, profile } = useAuth();
   const [trips, setTrips] = useState<TripWithRole[] | null>(null);
   const [creating, setCreating] = useState(false);
+  const [householdInvite, setHouseholdInvite] = useState(false);
+
+  useEffect(() => {
+    supabase()
+      .from("household_members")
+      .select("household_id")
+      .eq("user_id", user!.id)
+      .eq("status", "pending")
+      .then(({ data }) => setHouseholdInvite(!!data?.length));
+  }, [user]);
 
   const load = useCallback(async () => {
     const { data, error } = await supabase()
@@ -58,6 +69,13 @@ function TripsInner() {
           </button>
         </div>
 
+        <InstallPrompt />
+        {householdInvite && (
+          <div className="card card-tight row wrap" style={{ marginBottom: "1rem", background: "var(--soft)" }}>
+            <span className="grow small">💞 Someone wants to link households with you, so you settle up together on shared trips.</span>
+            <Link className="btn btn-sm btn-primary" href="/settings">Review</Link>
+          </div>
+        )}
         {trips === null ? (
           <Loader2 className="spin" />
         ) : trips.length === 0 ? (

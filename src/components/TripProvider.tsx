@@ -11,7 +11,7 @@ import { useAuth } from "./AuthProvider";
 import { useToast } from "./ui/Toast";
 import type {
   Comment, Expense, Flight, Idea, Invite, ItineraryItem, Member, Note, PackingItem, Photo,
-  Profile, Stay, Trip, TripView, Vote,
+  Profile, Stay, Trip, TripView, Vote, Household, HouseholdMember,
 } from "@/lib/types";
 import { resolveTheme } from "@/lib/themes";
 import { defaultPageLayout, pageToBoard } from "@/lib/blocks";
@@ -101,6 +101,17 @@ interface TripContextValue {
   photoUrl: (path: string) => string | undefined;
   ensurePhotoUrls: (paths: string[]) => Promise<void>;
   reload: () => Promise<void>;
+  /** Households (couples, families) that trip members belong to. */
+  households: Household[];
+  householdMembers: HouseholdMember[];
+  /** Household id for a person, or null if they don't share money with anyone. */
+  householdOf: (userId: string) => string | null;
+  /** Party id used for settling up: the household id, or the person's own id. */
+  partyOf: (userId: string) => string;
+  partyName: (partyId: string) => string;
+  /** Everyone marked as going (the default for "who's doing this"). */
+  goingIds: string[];
+  reloadHouseholds: () => Promise<void>;
 }
 
 const TripContext = createContext<TripContextValue | null>(null);
@@ -118,12 +129,33 @@ export function TripProvider({ tripId, children }: { tripId: string; children: R
   const [offline, setOffline] = useState(false);
   const [online, setOnline] = useState<PresenceUser[]>([]);
   const [photoUrls, setPhotoUrls] = useState<Record<string, { url: string; at: number }>>({});
+  const [households, setHouseholds] = useState<Household[]>([]);
+  const [householdMembers, setHouseholdMembers] = useState<HouseholdMember[]>([]);
   const channelRef = useRef<RealtimeChannel | null>(null);
   const presencePage = useRef("home");
   const viewRef = useRef<TripView | null>(null);
   const snapshotKey = `driftbook:trip:${tripId}:${me}`;
 
   // ---------------------------------------------------------------- loading
+  const loadHouseholds = useCallback(async (ids: string[]) => {
+    const unique = [...new Set(ids.filter(Boolean))];
+    if (!unique.length) return;
+    const sb = supabase();
+    const { data: mine } = await sb.from("household_members").select("*").in("user_id", unique);
+    const hids = [...new Set(((mine as HouseholdMember[]) ?? []).map((m) => m.household_id))];
+    if (!hids.length) {
+      setHouseholds([]);
+      setHouseholdMembers([]);
+      return;
+    }
+    const [hs, all] = await Promise.all([
+      sb.from("households").select("id, name, created_by").in("id", hids),
+      sb.from("household_members").select("*").in("household_id", hids),
+    ]);
+    setHouseholds((hs.data as Household[]) ?? []);
+    setHouseholdMembers((all.data as HouseholdMember[]) ?? []);
+  }, []);
+
   const loadProfiles = useCallback(async (ids: string[]) => {
     const unique = [...new Set(ids.filter(Boolean))];
     if (!unique.length) return;
@@ -177,8 +209,11 @@ export function TripProvider({ tripId, children }: { tripId: string; children: R
     setOffline(false);
     setError(null);
     setLoading(false);
-    await loadProfiles(next.trip_members.map((m) => m.user_id));
-  }, [me, tripId, snapshotKey, loadProfiles]);
+    await Promise.all([
+      loadProfiles(next.trip_members.map((m) => m.user_id)),
+      loadHouseholds(next.trip_members.map((m) => m.user_id)),
+    ]);
+  }, [me, tripId, snapshotKey, loadProfiles, loadHouseholds]);
 
   useEffect(() => {
     setLoading(true);
@@ -453,6 +488,27 @@ export function TripProvider({ tripId, children }: { tripId: string; children: R
   );
   const photoUrl = useCallback((path: string) => photoUrls[path]?.url, [photoUrls]);
 
+  const goingIds = useMemo(
+    () => rows.trip_members.filter((m) => m.attendance === "going").map((m) => m.user_id),
+    [rows.trip_members],
+  );
+  const householdOf = useCallback(
+    (userId: string) => householdMembers.find((m) => m.user_id === userId && m.status === "accepted")?.household_id ?? null,
+    [householdMembers],
+  );
+  const partyOf = useCallback((userId: string) => householdOf(userId) ?? userId, [householdOf]);
+  const partyName = useCallback(
+    (partyId: string) => {
+      const h = households.find((x) => x.id === partyId);
+      if (!h) return nameOf(partyId);
+      if (h.name.trim()) return h.name;
+      const names = householdMembers.filter((m) => m.household_id === partyId && m.status === "accepted").map((m) => nameOf(m.user_id).split(" ")[0]);
+      return names.join(" & ") || "Household";
+    },
+    [households, householdMembers, nameOf],
+  );
+  const reloadHouseholds = useCallback(() => loadHouseholds(rows.trip_members.map((m) => m.user_id)), [loadHouseholds, rows.trip_members]);
+
   const resolvedView = useMemo(() => {
     const base = defaultView(tripId, me);
     if (!view) return base;
@@ -472,6 +528,7 @@ export function TripProvider({ tripId, children }: { tripId: string; children: R
     tripId, loading, error, offline, trip, rows, profiles, me, myRole, canEdit, isOwner, online,
     view: resolvedView, setPresencePage, nameOf, colorOf, insert, update, remove, updateTrip,
     saveView, vote, photoUrl, ensurePhotoUrls, reload: load,
+    households, householdMembers, householdOf, partyOf, partyName, goingIds, reloadHouseholds,
   };
 
   return <TripContext.Provider value={value}>{children}</TripContext.Provider>;

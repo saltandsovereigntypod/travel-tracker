@@ -8,6 +8,9 @@ import { Modal } from "../ui/Modal";
 import { Avatar, EmptyState, Field, PersonPicker, Segmented } from "../ui/Fields";
 import { useToast } from "../ui/Toast";
 import { CommentThread } from "./Comments";
+import { CostEditor, costColumns, costValueFrom, type CostValue } from "../ui/CostEditor";
+import { PaymentPanel, PayStatus } from "./Payments";
+import { participantsForFlight, useMoney } from "./money";
 import { formatDay, formatMoney, formatTime, splitLocal } from "@/lib/format";
 import type { BookingStatus, Flight } from "@/lib/types";
 
@@ -120,20 +123,33 @@ function BoardingPass({ flight: f, compact, onOpen }: { flight: Flight; compact?
           <span className="muted">—</span>
         )}
         {f.seats && <span className="tiny">Seats {f.seats}</span>}
-        {f.cost != null && <span className="tiny muted">{formatMoney(f.cost, trip?.currency)}</span>}
+        <FlightMoney flight={f} />
       </div>
     </article>
+  );
+}
+
+function FlightMoney({ flight: f }: { flight: Flight }) {
+  const { trip } = useTrip();
+  const money = useMoney();
+  const c = money.byKey[`flight:${f.id}`];
+  if (!c?.total && !c?.paid) return null;
+  return (
+    <>
+      {c.total != null && <span className="tiny muted">{formatMoney(c.total, trip?.currency)}</span>}
+      <PayStatus thing={c} />
+    </>
   );
 }
 
 const blank = {
   airline: "", flight_number: "", from_code: "", from_name: "", to_code: "", to_name: "",
   depart_local: "", arrive_local: "", confirmation: "", seats: "", status: "booked" as BookingStatus,
-  travelers: [] as string[], cost: "", notes: "",
+  travelers: [] as string[], cost: costValueFrom(null, null, "person") as CostValue, notes: "",
 };
 
 function FlightModal({ flight, onClose }: { flight: Flight | "new" | null; onClose: () => void }) {
-  const { insert, update, remove, canEdit, rows, nameOf, colorOf, trip, me } = useTrip();
+  const { insert, update, remove, canEdit, rows, nameOf, colorOf, trip, me, goingIds, householdOf } = useTrip();
   const existing = flight && flight !== "new" ? flight : null;
   const [form, setForm] = useState(blank);
   const [loadedFor, setLoadedFor] = useState<unknown>(null);
@@ -146,7 +162,7 @@ function FlightModal({ flight, onClose }: { flight: Flight | "new" | null; onClo
             ...existing,
             depart_local: existing.depart_local?.slice(0, 16) ?? "",
             arrive_local: existing.arrive_local?.slice(0, 16) ?? "",
-            cost: existing.cost?.toString() ?? "",
+            cost: costValueFrom(existing.cost, existing),
           }
         : { ...blank, travelers: me ? [me] : [] },
     );
@@ -169,7 +185,7 @@ function FlightModal({ flight, onClose }: { flight: Flight | "new" | null; onClo
       seats: form.seats.trim(),
       status: form.status,
       travelers: form.travelers,
-      cost: form.cost === "" ? null : Number(form.cost),
+      ...costColumns(form.cost),
       notes: form.notes,
     };
     const ok = existing ? await update("flights", existing.id, row) : !!(await insert("flights", row));
@@ -212,13 +228,18 @@ function FlightModal({ flight, onClose }: { flight: Flight | "new" | null; onClo
           <Field label="Arrives (local time)"><input className="input" type="datetime-local" value={form.arrive_local} onChange={(e) => set("arrive_local", e.target.value)} /></Field>
           <Field label="Confirmation code"><input className="input" value={form.confirmation} onChange={(e) => set("confirmation", e.target.value)} placeholder="ABC123" /></Field>
           <Field label="Seats"><input className="input" value={form.seats} onChange={(e) => set("seats", e.target.value)} placeholder="14A, 14B" /></Field>
-          <Field label={`Total cost (${trip?.currency ?? "USD"})`}><input className="input" type="number" min="0" step="0.01" value={form.cost} onChange={(e) => set("cost", e.target.value)} /></Field>
           <Field label="Who's on this flight" full>
             <PersonPicker people={people} value={form.travelers} onChange={(v) => set("travelers", v)} nameOf={nameOf} colorOf={colorOf} />
           </Field>
+          <CostEditor value={form.cost} onChange={(v) => set("cost", v)} participants={participantsForFlight(form, goingIds)} currency={trip?.currency ?? "USD"} householdOf={householdOf} label="Ticket price" />
           <Field label="Notes" full><textarea className="input textarea" value={form.notes} onChange={(e) => set("notes", e.target.value)} placeholder="Baggage, terminal, layover…" /></Field>
         </fieldset>
       </form>
+      {existing && existing.status === "booked" && (
+        <div style={{ marginTop: "1.2rem" }}>
+          <PaymentPanel type="flight" id={existing.id} category="flights" />
+        </div>
+      )}
       {existing && (
         <div style={{ marginTop: "1.2rem" }}>
           <h3 style={{ marginBottom: "0.6rem" }}>Comments</h3>

@@ -24,13 +24,20 @@ export function Modal({
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      // With modals stacked (e.g. a payment opened from a plan), Escape closes only the top one.
+      if (e.key !== "Escape") return;
+      const all = document.querySelectorAll(".modal-backdrop");
+      if (all[all.length - 1]?.contains(panel.current)) onClose();
     };
     document.addEventListener("keydown", onKey);
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     // Focus the first field for quick typing.
-    setTimeout(() => panel.current?.querySelector<HTMLElement>("input, textarea, select, button.btn-primary")?.focus(), 30);
+    // (Skip it if the person already clicked into a field.)
+    setTimeout(() => {
+      if (panel.current?.contains(document.activeElement)) return;
+      panel.current?.querySelector<HTMLElement>("input, textarea, select, button.btn-primary")?.focus();
+    }, 30);
     return () => {
       document.removeEventListener("keydown", onKey);
       document.body.style.overflow = prev;

@@ -8,6 +8,9 @@ import { Modal } from "../ui/Modal";
 import { Avatar, EmptyState, Field, PersonPicker, PlaceSearch, Segmented } from "../ui/Fields";
 import { useToast } from "../ui/Toast";
 import { CommentThread } from "./Comments";
+import { CostEditor, costColumns, costValueFrom, type CostValue } from "../ui/CostEditor";
+import { PaymentPanel, PayStatus } from "./Payments";
+import { participantsForStay, stayNights, useMoney } from "./money";
 import { STAY_KINDS, stayKindOf } from "@/lib/categories";
 import { daysBetween, formatDay, formatMoney, formatTime, normalizeUrl, hostname } from "@/lib/format";
 import { mapsLink } from "@/lib/services";
@@ -52,6 +55,8 @@ function StayCard({ stay: s, compact, onOpen }: { stay: Stay; compact?: boolean;
   const { trip, nameOf, colorOf } = useTrip();
   const toast = useToast();
   const kind = stayKindOf(s.kind);
+  const money = useMoney();
+  const costed = money.byKey[`stay:${s.id}`];
   const nights = s.check_in && s.check_out ? daysBetween(s.check_in, s.check_out) : null;
   const dirs = mapsLink(s.location, s.address || s.name);
   return (
@@ -87,7 +92,8 @@ function StayCard({ stay: s, compact, onOpen }: { stay: Stay; compact?: boolean;
               <Copy size={11} /> {s.confirmation}
             </button>
           )}
-          {s.cost != null && <span className="chip chip-muted">{formatMoney(s.cost, trip?.currency)}{nights ? ` · ${formatMoney(s.cost / Math.max(nights, 1), trip?.currency, true)}/night` : ""}</span>}
+          {costed?.total != null && <span className="chip chip-muted">{formatMoney(costed.total, trip?.currency)}{nights ? ` · ${formatMoney(costed.total / Math.max(nights, 1), trip?.currency, true)}/night` : ""}</span>}
+          {costed && costed.status !== "none" && <PayStatus thing={costed} />}
           {dirs && <a className="chip chip-2" href={dirs} target="_blank" rel="noopener noreferrer"><MapPin size={11} /> Directions</a>}
           {s.phone && <a className="chip chip-2" href={`tel:${s.phone}`}><Phone size={11} /> Call</a>}
           {s.url && <a className="chip chip-2" href={s.url} target="_blank" rel="noopener noreferrer"><ExternalLink size={11} /> {hostname(s.url)}</a>}
@@ -105,11 +111,11 @@ function StayCard({ stay: s, compact, onOpen }: { stay: Stay; compact?: boolean;
 const blank = {
   name: "", kind: "hotel" as StayKind, address: "", location: {} as Place, check_in: "", check_out: "",
   check_in_time: "", check_out_time: "", confirmation: "", url: "", phone: "", status: "booked" as BookingStatus,
-  guests: [] as string[], cost: "", notes: "",
+  guests: [] as string[], cost: costValueFrom(null, null, "night") as CostValue, notes: "",
 };
 
 function StayModal({ stay, onClose }: { stay: Stay | "new" | null; onClose: () => void }) {
-  const { insert, update, remove, canEdit, rows, nameOf, colorOf, trip } = useTrip();
+  const { insert, update, remove, canEdit, rows, nameOf, colorOf, trip, goingIds, householdOf } = useTrip();
   const existing = stay && stay !== "new" ? stay : null;
   const [form, setForm] = useState(blank);
   const [loadedFor, setLoadedFor] = useState<unknown>(null);
@@ -125,7 +131,7 @@ function StayModal({ stay, onClose }: { stay: Stay | "new" | null; onClose: () =
             check_in_time: existing.check_in_time?.slice(0, 5) ?? "",
             check_out_time: existing.check_out_time?.slice(0, 5) ?? "",
             url: existing.url ?? "",
-            cost: existing.cost?.toString() ?? "",
+            cost: costValueFrom(existing.cost, existing),
           }
         : { ...blank, check_in: trip?.start_date ?? "", check_out: trip?.end_date ?? "", guests: rows.trip_members.filter((m) => m.attendance !== "not_going").map((m) => m.user_id) },
     );
@@ -150,7 +156,7 @@ function StayModal({ stay, onClose }: { stay: Stay | "new" | null; onClose: () =
       phone: form.phone.trim(),
       status: form.status,
       guests: form.guests,
-      cost: form.cost === "" ? null : Number(form.cost),
+      ...costColumns(form.cost),
       notes: form.notes,
     };
     const ok = existing ? await update("stays", existing.id, row) : !!(await insert("stays", row));
@@ -189,7 +195,7 @@ function StayModal({ stay, onClose }: { stay: Stay | "new" | null; onClose: () =
               {STAY_KINDS.map((k) => <option key={k.id} value={k.id}>{k.emoji} {k.label}</option>)}
             </select>
           </Field>
-          <Field label={`Total cost (${trip?.currency ?? "USD"})`}><input className="input" type="number" min="0" step="0.01" value={form.cost} onChange={(e) => set("cost", e.target.value)} /></Field>
+
           <Field label="Find on the map" full>
             <PlaceSearch value={form.location} onChange={(p) => setForm((f) => ({ ...f, location: p, address: p.address ?? f.address }))} near={near} placeholder="Search the hotel or address" />
           </Field>
@@ -204,9 +210,23 @@ function StayModal({ stay, onClose }: { stay: Stay | "new" | null; onClose: () =
           <Field label="Who's staying" full>
             <PersonPicker people={rows.trip_members.map((m) => m.user_id)} value={form.guests} onChange={(v) => set("guests", v)} nameOf={nameOf} colorOf={colorOf} />
           </Field>
+          <CostEditor
+            value={form.cost}
+            onChange={(v) => set("cost", v)}
+            participants={participantsForStay(form, goingIds)}
+            currency={trip?.currency ?? "USD"}
+            householdOf={householdOf}
+            nights={stayNights(form)}
+            label="Price"
+          />
           <Field label="Notes" full><textarea className="input textarea" value={form.notes} onChange={(e) => set("notes", e.target.value)} placeholder="Door code, parking, Wi-Fi password…" /></Field>
         </fieldset>
       </form>
+      {existing && existing.status === "booked" && (
+        <div style={{ marginTop: "1.2rem" }}>
+          <PaymentPanel type="stay" id={existing.id} category="lodging" />
+        </div>
+      )}
       {existing && (
         <div style={{ marginTop: "1.2rem" }}>
           <h3 style={{ marginBottom: "0.6rem" }}>Comments</h3>
