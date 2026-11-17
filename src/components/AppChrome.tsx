@@ -51,7 +51,7 @@ export function UserMenu() {
           </div>
           <div className="divider-line" />
           <Link className="btn btn-ghost btn-block" style={{ justifyContent: "flex-start" }} href="/trips" onClick={() => setOpen(false)}>
-            <Plane size={16} /> My trips
+            <Plane size={16} /> Home
           </Link>
           <Link className="btn btn-ghost btn-block" style={{ justifyContent: "flex-start" }} href="/settings" onClick={() => setOpen(false)}>
             <Settings size={16} /> Settings

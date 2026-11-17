@@ -62,13 +62,13 @@ export function BlockRenderer({
   /** Board mode: fill the given box and scroll inside it. */
   fill?: boolean;
 }) {
-  const { tripId } = useTrip();
+  const { tripId, moduleName } = useTrip();
   const meta = blockMeta(block.type);
   const style = block.style ?? {};
   const isDecor = DECOR.includes(block.type);
   const cardStyle = style.cardStyle ?? (isDecor && block.type !== "text" && block.type !== "quote" ? "none" : undefined);
   const bare = cardStyle === "none";
-  const title = style.title ?? meta.label;
+  const title = style.title ?? (meta.section && meta.section !== "people" ? moduleName(meta.section, meta.label) : meta.label);
   const showTitle = !style.hideTitle && !isDecor && block.type !== "hero" && block.type !== "countdown";
 
   return (

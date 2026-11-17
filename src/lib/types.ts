@@ -22,7 +22,7 @@ export interface CostFields {
 }
 
 export type SplitMode = "equal" | "shares" | "exact";
-export type LinkedType = "itinerary" | "flight" | "stay";
+export type LinkedType = "itinerary" | "flight" | "stay" | "list_item";
 
 export interface Household {
   id: string;
@@ -56,6 +56,11 @@ export interface Trip {
   lat: number | null;
   lng: number | null;
   share_token: string | null;
+  /** Space kind (trip, wedding, podcast…). See lib/spaces.ts. */
+  kind: string;
+  icon: string;
+  /** Enabled modules in nav order; empty = template defaults. */
+  modules: { id: string; label?: string }[];
   created_by: string | null;
   created_at: string;
   updated_at: string;
@@ -190,6 +195,10 @@ export interface Expense {
   linked_type: LinkedType | null;
   linked_id: string | null;
   is_deposit: boolean;
+  /** Money out (expense) or money in (income). */
+  kind: "expense" | "income";
+  /** For repeating items: the due date this payment covers. */
+  period: string | null;
   spent_on: string | null;
   notes: string;
   created_by: string | null;
@@ -239,7 +248,7 @@ export interface Photo {
   created_at: string;
 }
 
-export type CommentEntity = "idea" | "itinerary" | "flight" | "stay" | "expense" | "note" | "photo";
+export type CommentEntity = "idea" | "itinerary" | "flight" | "stay" | "expense" | "note" | "photo" | "list_item" | "page";
 
 export interface Comment {
   id: string;
@@ -259,7 +268,27 @@ export interface TripView {
   theme: Partial<Theme>;
   page_layout: PageBlock[];
   board_layout: BoardBlock[];
+  /** Per-list view choices, private to this person. Keyed by list id. */
+  list_prefs?: Record<string, ListPrefs>;
   updated_at: string;
+}
+
+export type ListViewType = "table" | "cards" | "board" | "calendar" | "map" | "checklist";
+
+export interface ListPrefs {
+  view?: ListViewType;
+  /** Separate choice on phones, where tables are cramped. */
+  phoneView?: ListViewType;
+  /** Board: field to make columns from. */
+  groupBy?: string;
+  /** Calendar: which date field to use. */
+  dateField?: string;
+  /** Map: which place field. */
+  placeField?: string;
+  sort?: { field: string; dir: "asc" | "desc" };
+  /** Show only items assigned to me. */
+  mine?: boolean;
+  hideDone?: boolean;
 }
 
 export interface Template {

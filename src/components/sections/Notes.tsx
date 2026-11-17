@@ -6,6 +6,7 @@ import { Plus, Pin, Lock, Trash2, NotebookPen, BookOpen, Users } from "lucide-re
 import clsx from "clsx";
 import { formatDistanceToNow } from "date-fns";
 import { useTrip } from "../TripProvider";
+import { ModuleTitle } from "../ModuleTitle";
 import { AutoTextarea, Avatar, EmptyState, Segmented } from "../ui/Fields";
 import { formatDayLong, todayString } from "@/lib/format";
 import type { Note } from "@/lib/types";
@@ -64,8 +65,8 @@ export function NotesSection({ compact = false }: { compact?: boolean }) {
     <div>
       <div className="section-head">
         <div>
-          <h1>Notes & journal</h1>
-          <p>Shared notes for the group, private notes for you, and a trip journal for the memories.</p>
+          <ModuleTitle id="notes" fallback="Notes & journal" />
+          <p>Shared notes for the group, private notes for you, and a journal for the memories.</p>
         </div>
         {canCreate && <button className="btn btn-primary" onClick={create}><Plus size={16} /> {tab === "journal" ? "New entry" : "New note"}</button>}
       </div>

@@ -13,12 +13,16 @@ import type {
   Comment, Expense, Flight, Idea, Invite, ItineraryItem, Member, Note, PackingItem, Photo,
   Profile, Stay, Trip, TripView, Vote, Household, HouseholdMember,
 } from "@/lib/types";
+import type { ListDef, ListItem } from "@/lib/fields";
+import type { Page } from "@/lib/pages";
 import { resolveTheme } from "@/lib/themes";
 import { defaultPageLayout, pageToBoard } from "@/lib/blocks";
+import { resolveModules, templateFor, type ResolvedModule, type SpaceTemplate } from "@/lib/spaces";
 
 export type TableName =
   | "ideas" | "idea_votes" | "itinerary_items" | "flights" | "stays" | "expenses"
-  | "packing_items" | "notes" | "photos" | "comments" | "trip_members" | "trip_invites";
+  | "packing_items" | "notes" | "photos" | "comments" | "trip_members" | "trip_invites"
+  | "lists" | "list_items" | "pages";
 
 interface Rows {
   ideas: Idea[];
@@ -33,6 +37,9 @@ interface Rows {
   comments: Comment[];
   trip_members: Member[];
   trip_invites: Invite[];
+  lists: ListDef[];
+  list_items: ListItem[];
+  pages: Page[];
 }
 
 type RowOf<T extends TableName> = Rows[T][number];
@@ -40,12 +47,14 @@ type RowOf<T extends TableName> = Rows[T][number];
 const TABLES: TableName[] = [
   "ideas", "idea_votes", "itinerary_items", "flights", "stays", "expenses",
   "packing_items", "notes", "photos", "comments", "trip_members", "trip_invites",
+  "lists", "list_items", "pages",
 ];
 const LIVE_TABLES = TABLES.filter((t) => t !== "trip_invites");
 
 const emptyRows = (): Rows => ({
   ideas: [], idea_votes: [], itinerary_items: [], flights: [], stays: [], expenses: [],
   packing_items: [], notes: [], photos: [], comments: [], trip_members: [], trip_invites: [],
+  lists: [], list_items: [], pages: [],
 });
 
 function keyOf(table: TableName, row: Record<string, unknown>): string {
@@ -112,6 +121,13 @@ interface TripContextValue {
   /** Everyone marked as going (the default for "who's doing this"). */
   goingIds: string[];
   reloadHouseholds: () => Promise<void>;
+  /** Modules switched on for this space, in nav order. */
+  modules: ResolvedModule[];
+  hasModule: (id: string) => boolean;
+  moduleName: (id: string, fallback?: string) => string;
+  template: SpaceTemplate;
+  /** "trip", "wedding", "show"… */
+  noun: string;
 }
 
 const TripContext = createContext<TripContextValue | null>(null);
@@ -191,7 +207,7 @@ export function TripProvider({ tripId, children }: { tripId: string; children: R
     const results = await Promise.all(
       TABLES.map((t) => {
         let q = sb.from(t).select("*").eq("trip_id", tripId);
-        if (t === "itinerary_items" || t === "packing_items") q = q.order("sort_order");
+        if (t === "itinerary_items" || t === "packing_items" || t === "lists" || t === "list_items" || t === "pages") q = q.order("sort_order");
         else if (t === "trip_members") q = q.order("joined_at");
         else q = q.order("created_at");
         return q;
@@ -509,6 +525,14 @@ export function TripProvider({ tripId, children }: { tripId: string; children: R
   );
   const reloadHouseholds = useCallback(() => loadHouseholds(rows.trip_members.map((m) => m.user_id)), [loadHouseholds, rows.trip_members]);
 
+  const modules = useMemo(() => resolveModules(trip), [trip]);
+  const template = useMemo(() => templateFor(trip?.kind), [trip?.kind]);
+  const hasModule = useCallback((id: string) => modules.some((m) => m.id === id), [modules]);
+  const moduleName = useCallback(
+    (id: string, fallback?: string) => modules.find((m) => m.id === id)?.name ?? fallback ?? id,
+    [modules],
+  );
+
   const resolvedView = useMemo(() => {
     const base = defaultView(tripId, me);
     if (!view) return base;
@@ -529,6 +553,7 @@ export function TripProvider({ tripId, children }: { tripId: string; children: R
     view: resolvedView, setPresencePage, nameOf, colorOf, insert, update, remove, updateTrip,
     saveView, vote, photoUrl, ensurePhotoUrls, reload: load,
     households, householdMembers, householdOf, partyOf, partyName, goingIds, reloadHouseholds,
+    modules, hasModule, moduleName, template, noun: template.noun,
   };
 
   return <TripContext.Provider value={value}>{children}</TripContext.Provider>;

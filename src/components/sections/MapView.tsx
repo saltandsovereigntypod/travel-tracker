@@ -4,10 +4,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import "maplibre-gl/dist/maplibre-gl.css";
 import type { Map as MLMap, Marker } from "maplibre-gl";
 import { useTrip } from "../TripProvider";
+import { ModuleTitle } from "../ModuleTitle";
 import { Segmented } from "../ui/Fields";
 import { categoryOf, stayKindOf } from "@/lib/categories";
 import { formatDay, formatTime, tripDays } from "@/lib/format";
 import { itemsForDay } from "./Itinerary";
+import { mapEntries } from "@/lib/fields";
 
 const STYLE = "https://tiles.openfreemap.org/styles/liberty";
 
@@ -19,7 +21,7 @@ interface Pin {
   color: string;
   title: string;
   sub: string;
-  layer: "plan" | "idea" | "stay";
+  layer: "plan" | "idea" | "stay" | "list";
 }
 
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
@@ -31,7 +33,7 @@ export function MapSection({ compact = false, height }: { compact?: boolean; hei
   const markers = useRef<Marker[]>([]);
   const [ready, setReady] = useState(false);
   const [day, setDay] = useState<string>("all");
-  const [layers, setLayers] = useState({ plan: true, idea: true, stay: true });
+  const [layers, setLayers] = useState({ plan: true, idea: true, stay: true, list: true });
   const days = tripDays(trip?.start_date ?? null, trip?.end_date ?? null);
 
   const pins = useMemo<Pin[]>(() => {
@@ -56,8 +58,14 @@ export function MapSection({ compact = false, height }: { compact?: boolean; hei
         out.push({ id: `s${s.id}`, lat: s.location.lat, lng: s.location.lng, emoji: stayKindOf(s.kind).emoji, color: "#2F4A3A", title: s.name, sub: `${formatDay(s.check_in)} – ${formatDay(s.check_out)}`, layer: "stay" });
       }
     }
+    if (layers.list) {
+      // Places from any custom list (restaurants, venues, vendors…).
+      for (const e of mapEntries({ lists: rows.lists, items: rows.list_items })) {
+        out.push({ id: `l${e.item.id}${e.field.id}`, lat: e.place.lat!, lng: e.place.lng!, emoji: e.list.icon, color: "#6D597A", title: e.item.title || "Untitled", sub: `${e.list.name} · ${e.field.name}`, layer: "list" });
+      }
+    }
     return out;
-  }, [rows.itinerary_items, rows.ideas, rows.stays, day, layers]);
+  }, [rows.itinerary_items, rows.ideas, rows.stays, rows.lists, rows.list_items, day, layers]);
 
   // Route line for a single day, in itinerary order.
   const route = useMemo(() => {
@@ -127,14 +135,14 @@ export function MapSection({ compact = false, height }: { compact?: boolean; hei
       {!compact && (
         <div className="section-head" style={{ marginBottom: 0 }}>
           <div>
-            <h1>Map</h1>
+            <ModuleTitle id="map" fallback="Map" />
             <p>Plans, ideas and stays with a location. Pick a day to see its route.</p>
           </div>
         </div>
       )}
       <div className="toolbar">
         <select className="input" style={{ width: "auto" }} value={day} onChange={(e) => setDay(e.target.value)} aria-label="Day">
-          <option value="all">Whole trip</option>
+          <option value="all">Everything</option>
           {days.map((d, i) => <option key={d} value={d}>Day {i + 1} · {formatDay(d)}</option>)}
         </select>
         {!compact && (
@@ -146,6 +154,7 @@ export function MapSection({ compact = false, height }: { compact?: boolean; hei
               { value: "plan", label: `${layers.plan ? "✓" : "○"} Plans` },
               { value: "idea", label: `${layers.idea ? "✓" : "○"} Ideas` },
               { value: "stay", label: `${layers.stay ? "✓" : "○"} Stays` },
+              { value: "list", label: `${layers.list ? "✓" : "○"} Lists` },
             ]}
           />
         )}

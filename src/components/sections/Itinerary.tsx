@@ -9,6 +9,7 @@ import {
 import { Plus, Plane, BedDouble, MapPin, ExternalLink, Trash2, CalendarDays, Clock, MessageCircle } from "lucide-react";
 import clsx from "clsx";
 import { useTrip } from "../TripProvider";
+import { ModuleTitle } from "../ModuleTitle";
 import { Modal } from "../ui/Modal";
 import { EmptyState, Field, PersonPicker, PlaceSearch, Segmented } from "../ui/Fields";
 import { CostEditor, costColumns, costValueFrom, type CostValue } from "../ui/CostEditor";
@@ -27,18 +28,23 @@ const UNSCHEDULED = "unscheduled";
 
 export { itemsForDay, orderForTime } from "./itinerary-order";
 import { itemsForDay, orderForTime } from "./itinerary-order";
+import { calendarEntries } from "@/lib/fields";
+import { pageTasks } from "@/lib/pages";
 
 interface FixedEvent {
   key: string;
-  kind: "flight" | "stay";
+  kind: "flight" | "stay" | "list";
   time: string | null;
   title: string;
   sub: string;
+  /** For list items: where tapping goes. */
+  href?: string;
+  icon?: string;
 }
 
 /** Flights and stay check-ins/outs that land on each day. */
 export function useFixedEvents() {
-  const { rows } = useTrip();
+  const { rows, tripId } = useTrip();
   return useMemo(() => {
     const byDay: Record<string, FixedEvent[]> = {};
     const add = (day: string | null, e: FixedEvent) => {
@@ -58,9 +64,34 @@ export function useFixedEvents() {
       add(s.check_in, { key: `s-${s.id}-in`, kind: "stay", time: s.check_in_time, title: `Check in: ${s.name}`, sub: s.status === "idea" ? "Not booked yet" : "Stay" });
       add(s.check_out, { key: `s-${s.id}-out`, kind: "stay", time: s.check_out_time, title: `Check out: ${s.name}`, sub: "Stay" });
     }
+    // Dates from any custom list (deposit due, recording, bill due…) show up too.
+    for (const c of calendarEntries({ lists: rows.lists, items: rows.list_items })) {
+      add(c.day, {
+        key: `l-${c.item.id}-${c.field.id}`,
+        kind: "list",
+        time: c.time,
+        title: c.item.title || "Untitled",
+        sub: `${c.list.name} · ${c.field.name}`,
+        href: `/trips/${tripId}/lists/${c.list.id}?item=${c.item.id}`,
+        icon: c.list.icon,
+      });
+    }
+    // So do dated to-dos written on pages.
+    for (const t of pageTasks(rows.pages)) {
+      if (!t.due) continue;
+      add(t.due, {
+        key: `p-${t.block.id}`,
+        kind: "list",
+        time: null,
+        title: `${t.done ? "✓ " : ""}${t.text}`,
+        sub: `${t.page.title || "Page"} · To-do`,
+        href: `/trips/${tripId}/pages/${t.page.id}`,
+        icon: t.page.icon,
+      });
+    }
     Object.values(byDay).forEach((l) => l.sort((a, b) => (a.time ?? "99").localeCompare(b.time ?? "99")));
     return byDay;
-  }, [rows.flights, rows.stays]);
+  }, [rows.flights, rows.stays, rows.lists, rows.list_items, rows.pages, tripId]);
 }
 
 export function ItinerarySection({ compact = false }: { compact?: boolean }) {
@@ -80,8 +111,10 @@ export function ItinerarySection({ compact = false }: { compact?: boolean }) {
   );
 
   const days = tripDays(trip?.start_date ?? null, trip?.end_date ?? null);
-  const outside = [...new Set(rows.itinerary_items.map((i) => i.day).filter((d): d is string => !!d && !days.includes(d)))].sort();
-  const allDays = [...days, ...outside];
+  // Days outside the space's range that still have something on them (plans, flights, list dates…).
+  const outside = [...new Set([...rows.itinerary_items.map((i) => i.day), ...Object.keys(fixed)].filter((d): d is string => !!d && !days.includes(d)))].sort();
+  // Trip-style spaces show every day in their range; any other dated plans slot in chronologically.
+  const allDays = [...days, ...outside].sort();
   const unscheduled = itemsForDay(rows.itinerary_items, null);
   const today = todayString();
 
@@ -141,7 +174,7 @@ export function ItinerarySection({ compact = false }: { compact?: boolean }) {
       {!compact && (
         <div className="section-head">
           <div>
-            <h1>Itinerary</h1>
+            <ModuleTitle id="itinerary" fallback="Itinerary" />
             <p>
               <span className="hide-phone">Drag plans between days. </span>
               <span className="show-phone">Tap a plan to edit it or change its day. </span>
@@ -172,8 +205,8 @@ export function ItinerarySection({ compact = false }: { compact?: boolean }) {
       {!days.length && !compact && (
         <div className="card" style={{ marginBottom: "1rem" }}>
           <p>
-            <strong>Set your trip dates</strong> to get a day-by-day plan.{" "}
-            <Link href={`/trips/${tripId}/settings`} style={{ color: "var(--accent)" }}>Trip settings →</Link>
+            <strong>Add dates</strong> to get a day-by-day plan, or just add plans with any date.{" "}
+            <Link href={`/trips/${tripId}/settings`} style={{ color: "var(--accent)" }}>Settings →</Link>
           </p>
         </div>
       )}
@@ -271,7 +304,7 @@ function DayColumn({
     <section id={day ? `day-${day}` : "day-unscheduled"} className={clsx("card day-col", compact && "card-tight")} style={isToday ? { outline: "2px solid var(--accent)" } : undefined}>
       <div className="day-head">
         <div>
-          <div className="day-num">{day ? (index >= 0 ? `Day ${index + 1}` : "Outside trip dates") : "Unscheduled"}{isToday && " · Today"}</div>
+          <div className="day-num">{day ? (index >= 0 ? `Day ${index + 1}` : parseMonth(day)) : "Unscheduled"}{isToday && " · Today"}</div>
           <h3>{day ? formatDay(day, { weekday: "long" }) : "Someday / not sure yet"}</h3>
         </div>
         {canEdit && !compact && (
@@ -283,16 +316,7 @@ function DayColumn({
       <div ref={setNodeRef} className={clsx("day-drop", isOver && "over")}>
         {merged.map((m) =>
           "fixed" in m ? (
-            <div key={m.fixed.key} className="itin-item itin-fixed">
-              <span className="itin-time">{formatTime(m.fixed.time) || "—"}</span>
-              <span className="cat-dot" style={{ background: "var(--surface)" }}>
-                {m.fixed.kind === "flight" ? <Plane size={15} /> : <BedDouble size={15} />}
-              </span>
-              <div className="grow">
-                <strong className="small">{m.fixed.title}</strong>
-                <div className="tiny muted">{m.fixed.sub}</div>
-              </div>
-            </div>
+            <FixedRow key={m.fixed.key} e={m.fixed} />
           ) : (
             <ItemRow key={m.item.id} item={m.item} onOpen={() => onOpen(m.item)} draggable={canEdit} />
           ),
@@ -362,9 +386,11 @@ function ItemModal({ target, onClose }: { target: ItineraryItem | { day: string 
   const existing = target && "id" in target ? target : null;
   const days = tripDays(trip?.start_date ?? null, trip?.end_date ?? null);
   const [form, setForm] = useState(blank);
+  const [pickDate, setPickDate] = useState(false);
   const [loadedFor, setLoadedFor] = useState<unknown>(null);
   if (target !== loadedFor) {
     setLoadedFor(target);
+    setPickDate(false);
     if (existing) {
       setForm({
         title: existing.title,
@@ -452,11 +478,20 @@ function ItemModal({ target, onClose }: { target: ItineraryItem | { day: string 
               <input className="input" value={form.title} onChange={(e) => set("title", e.target.value)} placeholder="Dinner at Turner's Seafood" required maxLength={200} />
             </Field>
             <Field label="Day">
-              <select className="input" value={form.day} onChange={(e) => set("day", e.target.value)}>
-                <option value="">Unscheduled</option>
-                {days.map((d, i) => <option key={d} value={d}>Day {i + 1} · {formatDay(d)}</option>)}
-                {form.day && !days.includes(form.day) && <option value={form.day}>{formatDay(form.day)}</option>}
-              </select>
+              {days.length && !pickDate ? (
+                <select
+                  className="input"
+                  value={form.day}
+                  onChange={(e) => (e.target.value === "__pick" ? setPickDate(true) : set("day", e.target.value))}
+                >
+                  <option value="">Unscheduled</option>
+                  {days.map((d, i) => <option key={d} value={d}>Day {i + 1} · {formatDay(d)}</option>)}
+                  {form.day && !days.includes(form.day) && <option value={form.day}>{formatDay(form.day)}</option>}
+                  <option value="__pick">Another date…</option>
+                </select>
+              ) : (
+                <input className="input" type="date" value={form.day} onChange={(e) => set("day", e.target.value)} />
+              )}
             </Field>
             <Field label="Category">
               <select className="input" value={form.category} onChange={(e) => set("category", e.target.value)}>
@@ -547,5 +582,30 @@ function TrayIdea({ idea, up, onTap }: { idea: Idea; up: number; onTap: () => vo
       <span className="grow">{idea.title}</span>
       {up > 0 && <span className="tiny muted row" style={{ gap: 2 }}><ThumbsUp size={11} />{up}</span>}
     </div>
+  );
+}
+
+function parseMonth(day: string) {
+  const [y, m] = day.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, 1)).toLocaleDateString("en-US", { month: "long", year: "numeric", timeZone: "UTC" });
+}
+
+function FixedRow({ e }: { e: FixedEvent }) {
+  const inner = (
+    <>
+      <span className="itin-time">{formatTime(e.time) || "—"}</span>
+      <span className="cat-dot" style={{ background: "var(--surface)" }}>
+        {e.kind === "flight" ? <Plane size={15} /> : e.kind === "stay" ? <BedDouble size={15} /> : <span aria-hidden>{e.icon}</span>}
+      </span>
+      <div className="grow">
+        <strong className="small">{e.title}</strong>
+        <div className="tiny muted">{e.sub}</div>
+      </div>
+    </>
+  );
+  return e.href ? (
+    <Link href={e.href} className="itin-item itin-fixed" style={{ cursor: "pointer", textDecoration: "none", color: "inherit" }}>{inner}</Link>
+  ) : (
+    <div className="itin-item itin-fixed">{inner}</div>
   );
 }

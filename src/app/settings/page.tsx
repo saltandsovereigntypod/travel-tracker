@@ -8,6 +8,8 @@ import { Avatar, Field } from "@/components/ui/Fields";
 import { useToast } from "@/components/ui/Toast";
 import { shrinkImage } from "@/components/sections/Photos";
 import { HouseholdCard } from "@/components/settings/HouseholdCard";
+import { RemindersCard } from "@/components/Reminders";
+import { MyTemplatesCard } from "@/components/templates/TemplateCards";
 import { friendlyError, supabase } from "@/lib/supabase";
 
 function SettingsInner() {
@@ -79,6 +81,8 @@ function SettingsInner() {
             <p className="tiny muted">Signed in as {user?.email}</p>
           </div>
           <HouseholdCard />
+          <RemindersCard />
+          <MyTemplatesCard />
           <form className="card stack" onSubmit={changePassword}>
             <h3>Password</h3>
             <Field label="New password" hint="At least 8 characters."><input className="input" type="password" minLength={8} value={pw} onChange={(e) => setPw(e.target.value)} autoComplete="new-password" /></Field>
@@ -86,7 +90,7 @@ function SettingsInner() {
           </form>
           <div className="card">
             <h3>Your designs</h3>
-            <p className="muted small" style={{ marginTop: 4 }}>Themes and layouts are saved per trip. Save one as a template from any trip&apos;s My view → Customize → Templates to reuse it.</p>
+            <p className="muted small" style={{ marginTop: 4 }}>Themes and layouts are saved per space. Save one as a template from any space&apos;s My view → Customize → Templates to reuse it.</p>
           </div>
         </div>
       </main>

@@ -40,7 +40,7 @@ export function PeopleSection({ compact = false }: { compact?: boolean }) {
         </div>
       </div>
       <div className="card">
-        <h3 style={{ marginBottom: "0.8rem" }}>Travelers ({going.length} going{maybe.length ? `, ${maybe.length} maybe` : ""})</h3>
+        <h3 style={{ marginBottom: "0.8rem" }}>People ({going.length} going{maybe.length ? `, ${maybe.length} maybe` : ""})</h3>
         <div className="stack">
           {rows.trip_members.map((m) => <MemberRow key={m.user_id} member={m} />)}
         </div>
@@ -97,8 +97,8 @@ function MemberRow({ member: m }: { member: Member }) {
         </div>
       )}
       {isOwner && !isMe && (
-        <button className="icon-btn" aria-label="Remove from trip" onClick={async () => {
-          if (!confirm(`Remove ${nameOf(m.user_id)} from this trip?`)) return;
+        <button className="icon-btn" aria-label="Remove" onClick={async () => {
+          if (!confirm(`Remove ${nameOf(m.user_id)} ?`)) return;
           const { error } = await supabase().from("trip_members").delete().eq("trip_id", m.trip_id).eq("user_id", m.user_id);
           if (error) toast.error(friendlyError(error));
           else await reload();
@@ -190,7 +190,7 @@ function ShareLink() {
       ) : isOwner ? (
         <button className="btn" onClick={() => toggle(true)}><Link2 size={16} /> Create share link</button>
       ) : (
-        <p className="small muted">Only the trip owner can turn this on.</p>
+        <p className="small muted">Only the owner can turn this on.</p>
       )}
     </div>
   );
@@ -205,12 +205,12 @@ function LeaveTrip() {
   return (
     <div>
       <button className="btn btn-danger" onClick={async () => {
-        if (!confirm("Leave this trip? You'll need a new invite to come back.")) return;
+        if (!confirm("Leave? You'll need a new invite to come back.")) return;
         const { error } = await supabase().from("trip_members").delete().eq("trip_id", tripId).eq("user_id", me);
         if (error) toast.error(friendlyError(error));
         else router.replace("/trips");
       }}>
-        <LogOut size={16} /> Leave trip
+        <LogOut size={16} /> Leave
       </button>
     </div>
   );

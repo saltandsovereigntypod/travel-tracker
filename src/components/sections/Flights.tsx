@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { Plane, Plus, Trash2, Copy } from "lucide-react";
 import { useTrip } from "../TripProvider";
+import { ModuleTitle } from "../ModuleTitle";
 import { Modal } from "../ui/Modal";
 import { Avatar, EmptyState, Field, PersonPicker, Segmented } from "../ui/Fields";
 import { useToast } from "../ui/Toast";
@@ -36,7 +37,7 @@ export function FlightsSection({ compact = false }: { compact?: boolean }) {
       {!compact && (
         <div className="section-head">
           <div>
-            <h1>Flights</h1>
+            <ModuleTitle id="flights" fallback="Flights" />
             <p>Who&apos;s flying when, with confirmation codes in one place.</p>
           </div>
           {canEdit && <button className="btn btn-primary" onClick={() => setEditing("new")}><Plus size={16} /> Add flight</button>}

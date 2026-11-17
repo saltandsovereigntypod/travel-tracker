@@ -76,7 +76,7 @@ export function HouseholdCard() {
     <div className="card stack">
       <h3 className="row"><HeartHandshake size={18} /> Household</h3>
       <p className="muted small">
-        Link up with your partner or family. On every trip you share, budgets will settle up with you as one party, and
+        Link up with your partner or family. In every space you share, budgets will settle up with you as one party, and
         &quot;per 2 people&quot; or &quot;per room&quot; costs pair you together first. Each person still sees their own share.
       </p>
       {loading ? (

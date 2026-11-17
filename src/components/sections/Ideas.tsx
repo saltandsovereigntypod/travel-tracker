@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ThumbsUp, ThumbsDown, MessageCircle, Plus, ExternalLink, CalendarPlus, MapPin, Lightbulb, Trash2 } from "lucide-react";
 import clsx from "clsx";
 import { useTrip } from "../TripProvider";
+import { ModuleTitle } from "../ModuleTitle";
 import { Modal } from "../ui/Modal";
 import { Avatar, EmptyState, Field, PlaceSearch, Segmented } from "../ui/Fields";
 import { CostEditor, costColumns, costValueFrom, type CostValue } from "../ui/CostEditor";
@@ -84,7 +85,7 @@ export function IdeasSection({ compact = false, limit }: { compact?: boolean; li
       {!compact && (
         <div className="section-head">
           <div>
-            <h1>Ideas</h1>
+            <ModuleTitle id="ideas" fallback="Ideas" />
             <p>
               Everything anyone wants to do. Vote, comment, then add the winners to the itinerary.
               {wishlist > 0 && <> Doing every open idea would cost about <strong>{formatMoney(wishlist, trip?.currency)}</strong>.</>}

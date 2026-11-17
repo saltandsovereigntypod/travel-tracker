@@ -1,6 +1,6 @@
 // Driftbook service worker: keeps the app shell available offline.
 // Trip data itself is cached by the app (localStorage snapshot), not here.
-const CACHE = "driftbook-v1";
+const CACHE = "driftbook-v2";
 const SHELL = ["/", "/trips", "/icon.svg", "/stickers/paper-texture.svg"];
 
 self.addEventListener("install", (event) => {
@@ -43,4 +43,15 @@ self.addEventListener("fetch", (event) => {
         .catch(() => caches.match(req).then((hit) => hit || caches.match("/trips"))),
     );
   }
+});
+
+// Tapping a reminder opens (or focuses) Driftbook.
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((list) => {
+      const open = list.find((c) => c.url.includes(self.location.origin));
+      return open ? open.focus() : self.clients.openWindow("/trips");
+    }),
+  );
 });

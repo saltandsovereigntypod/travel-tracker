@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Plus, Trash2, Wallet, ArrowRight, Check, Pencil, Loader2, Users, HeartHandshake } from "lucide-react";
 import clsx from "clsx";
 import { useTrip } from "../TripProvider";
+import { ModuleTitle } from "../ModuleTitle";
 import { Modal } from "../ui/Modal";
 import { Avatar, EmptyState, Field, PersonPicker, Segmented } from "../ui/Fields";
 import { EXPENSE_CATEGORIES, expenseCategoryOf } from "@/lib/categories";
@@ -26,12 +27,14 @@ export interface ExpensePreset {
   linked_id?: string;
   is_deposit?: boolean;
   split_between?: string[];
+  kind?: "expense" | "income";
+  period?: string | null;
 }
 
 export function BudgetSection({ compact = false }: { compact?: boolean }) {
   const { rows, canEdit, updateTrip, nameOf, colorOf, insert, me, tripId, partyOf, partyName, households } = useTrip();
   const money = useMoney();
-  const { cur, spent, committedTotal, stillToPay, wishlist, budget, remainingBudget } = money;
+  const { cur, spent, committedTotal, stillToPay, wishlist, budget, remainingBudget, received, expectedIncome, incomeThings } = money;
   const [editing, setEditing] = useState<Expense | "new" | null>(null);
   const [preset, setPreset] = useState<ExpensePreset | null>(null);
   const [editBudget, setEditBudget] = useState(false);
@@ -49,6 +52,7 @@ export function BudgetSection({ compact = false }: { compact?: boolean }) {
           split_between: e.split_between.length ? e.split_between : going,
           split_mode: e.split_mode,
           split_shares: e.split_shares,
+          kind: e.kind,
         })),
         everyone,
       ),
@@ -64,7 +68,7 @@ export function BudgetSection({ compact = false }: { compact?: boolean }) {
 
   const byCategory = useMemo(() => {
     const m: Record<string, number> = {};
-    rows.expenses.filter((e) => e.category !== "settlement").forEach((e) => (m[e.category] = (m[e.category] ?? 0) + homeAmount(e, cur)));
+    rows.expenses.filter((e) => e.category !== "settlement" && e.kind !== "income").forEach((e) => (m[e.category] = (m[e.category] ?? 0) + homeAmount(e, cur)));
     return Object.entries(m).sort((a, b) => b[1] - a[1]);
   }, [rows.expenses, cur]);
   const maxCat = Math.max(1, ...byCategory.map(([, v]) => v));
@@ -126,7 +130,7 @@ export function BudgetSection({ compact = false }: { compact?: boolean }) {
     <div>
       <div className="section-head">
         <div>
-          <h1>Budget</h1>
+          <ModuleTitle id="budget" fallback="Budget" />
           <p>Plans you schedule count as <strong>still to pay</strong>. Mark them paid (or pay a deposit) and they move to <strong>spent</strong>.</p>
         </div>
         {canEdit && <button className="btn btn-primary" onClick={() => openNew()}><Plus size={16} /> Add expense</button>}
@@ -150,13 +154,42 @@ export function BudgetSection({ compact = false }: { compact?: boolean }) {
         <div className="card stat"><small>Spent (paid)</small><strong>{formatMoney(spent, cur)}</strong></div>
         <div className="card stat"><small>Still to pay</small><strong>{formatMoney(stillToPay, cur)}</strong><span className="tiny muted">of {formatMoney(committedTotal, cur)} planned</span></div>
         <div className="card stat">
-          <small>{remainingBudget >= 0 ? "Left in budget" : "Over budget"}</small>
+          <small>{!budget || remainingBudget >= 0 ? "Left in budget" : "Over budget"}</small>
           <strong style={{ color: remainingBudget < 0 ? "var(--danger)" : undefined }}>{budget ? formatMoney(Math.abs(remainingBudget), cur) : "—"}</strong>
         </div>
         <div className="card stat"><small>Wishlist (ideas)</small><strong>{formatMoney(wishlist, cur)}</strong><span className="tiny muted">if you did every idea</span></div>
         <div className="card stat"><small>Your share to pay</small><strong>{formatMoney(myShareLeft, cur)}</strong></div>
+        {(received > 0 || expectedIncome > 0) && (
+          <div className="card stat">
+            <small>Money in</small>
+            <strong style={{ color: "var(--success)" }}>+{formatMoney(received, cur)}</strong>
+            {expectedIncome > 0 && <span className="tiny muted">{formatMoney(expectedIncome, cur)} still expected</span>}
+          </div>
+        )}
       </div>
       {budget > 0 && <div className="progress" style={{ margin: "1rem 0 0" }}><span style={{ width: `${pct}%`, background: remainingBudget < 0 ? "var(--danger)" : undefined }} /></div>}
+
+      {incomeThings.some((c) => c.remaining > 0) && (
+        <>
+          <h2 style={{ margin: "1.8rem 0 0.8rem" }}>Expected income</h2>
+          <div className="card" style={{ padding: "0.4rem" }}>
+            {incomeThings.filter((c) => c.remaining > 0).map((c) => (
+              <div key={c.id} className="check-row">
+                <div className="grow">
+                  <strong className="small" style={{ display: "block" }}>{c.title}</strong>
+                  <span className="tiny muted">{c.day ? formatDay(c.day) : "No date"}{c.paid > 0 && ` · ${formatMoney(c.paid, cur)} received so far`}</span>
+                </div>
+                <strong className="small" style={{ color: "var(--success)" }}>+{formatMoney(c.remaining, cur)}</strong>
+                {canEdit && (
+                  <button className="btn btn-sm" onClick={() => openNew({ title: c.name ?? c.title, amount: c.remaining, category: "other", linked_type: c.type, linked_id: c.id, split_between: c.participants, kind: "income", period: c.period ?? null })}>
+                    Mark received
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        </>
+      )}
 
       {toPay.length > 0 && (
         <>
@@ -256,12 +289,12 @@ export function BudgetSection({ compact = false }: { compact?: boolean }) {
         <div className="grow">
           <strong className="small" style={{ display: "block" }}>{e.title}{e.is_deposit && <span className="pay-status pay-deposit" style={{ marginLeft: 6 }}>deposit</span>}</strong>
           <span className="tiny muted">
-            {e.paid_by ? `${nameOf(e.paid_by)} paid` : "Unassigned"} · {splitText}
+            {e.paid_by ? `${nameOf(e.paid_by)} ${e.kind === "income" ? "received" : "paid"}` : "Unassigned"} · {splitText}
             {e.spent_on && ` · ${formatDay(e.spent_on)}`}
           </span>
         </div>
         <div style={{ textAlign: "right" }}>
-          <strong className="small">{formatMoney(homeAmount(e, cur), cur)}</strong>
+          <strong className="small" style={e.kind === "income" ? { color: "var(--success)" } : undefined}>{e.kind === "income" ? "+" : ""}{formatMoney(homeAmount(e, cur), cur)}</strong>
           {e.currency !== cur && <div className="tiny muted">{formatMoney(e.amount, e.currency)}</div>}
         </div>
       </button>
@@ -272,11 +305,12 @@ export function BudgetSection({ compact = false }: { compact?: boolean }) {
 function ToPayRow({ thing: c, canEdit, onPay }: { thing: CostedThing; canEdit: boolean; onPay: (p: ExpensePreset) => void }) {
   const { trip } = useTrip();
   const cur = trip?.currency ?? "USD";
-  const emoji = c.type === "flight" ? "✈️" : c.type === "stay" ? "🏨" : "🎟️";
-  const category = c.type === "flight" ? "flights" : c.type === "stay" ? "lodging" : "activities";
+  // List items already carry their list's icon in the title.
+  const emoji = c.type === "flight" ? "✈️" : c.type === "stay" ? "🏨" : c.type === "list_item" ? null : "🎟️";
+  const category = c.type === "flight" ? "flights" : c.type === "stay" ? "lodging" : c.type === "list_item" ? "other" : "activities";
   return (
     <div className="check-row">
-      <span className="cat-dot">{emoji}</span>
+      {emoji && <span className="cat-dot">{emoji}</span>}
       <div className="grow">
         <strong className="small" style={{ display: "block" }}>{c.title}</strong>
         <span className="tiny muted">{c.day ? formatDay(c.day) : "No date"} · {c.participants.length} {c.participants.length === 1 ? "person" : "people"} · <PayStatus thing={c} /></span>
@@ -287,8 +321,8 @@ function ToPayRow({ thing: c, canEdit, onPay }: { thing: CostedThing; canEdit: b
       </div>
       {canEdit && (
         <div className="row hide-sm" style={{ gap: 4 }}>
-          <button className="btn btn-sm btn-ghost" onClick={() => onPay({ title: `${c.title} (deposit)`, category, linked_type: c.type, linked_id: c.id, is_deposit: true, split_between: c.participants })}>Deposit</button>
-          <button className="btn btn-sm" onClick={() => onPay({ title: c.title, amount: c.remaining, category, linked_type: c.type, linked_id: c.id, split_between: c.participants })}>Mark paid</button>
+          <button className="btn btn-sm btn-ghost" onClick={() => onPay({ title: `${c.name ?? c.title} (deposit)`, category, linked_type: c.type, linked_id: c.id, is_deposit: true, split_between: c.participants, period: c.period ?? null })}>Deposit</button>
+          <button className="btn btn-sm" onClick={() => onPay({ title: c.name ?? c.title, amount: c.remaining, category, linked_type: c.type, linked_id: c.id, split_between: c.participants, period: c.period ?? null })}>Mark paid</button>
         </div>
       )}
     </div>
@@ -304,6 +338,7 @@ export function ExpenseModal({ expense, preset, onClose }: { expense: Expense | 
     title: "", amount: "", currency: cur, amount_home: "", category: "food", paid_by: me, split_between: going,
     split_mode: "equal" as SplitMode, split_shares: {} as Record<string, number>, spent_on: todayString(), notes: "",
     is_deposit: false, linked_type: null as LinkedType | null, linked_id: null as string | null,
+    kind: "expense" as "expense" | "income", period: null as string | null,
   };
   const [form, setForm] = useState(blank);
   const [loadedFor, setLoadedFor] = useState<unknown>(null);
@@ -327,6 +362,8 @@ export function ExpenseModal({ expense, preset, onClose }: { expense: Expense | 
             is_deposit: existing.is_deposit,
             linked_type: existing.linked_type,
             linked_id: existing.linked_id,
+            kind: existing.kind ?? "expense",
+            period: existing.period ?? null,
           }
         : {
             ...blank,
@@ -337,6 +374,8 @@ export function ExpenseModal({ expense, preset, onClose }: { expense: Expense | 
             is_deposit: !!preset?.is_deposit,
             linked_type: preset?.linked_type ?? null,
             linked_id: preset?.linked_id ?? null,
+            kind: preset?.kind ?? "expense",
+            period: preset?.period ?? null,
           },
     );
   }
@@ -384,6 +423,8 @@ export function ExpenseModal({ expense, preset, onClose }: { expense: Expense | 
       is_deposit: form.is_deposit,
       linked_type: form.linked_type,
       linked_id: form.linked_id,
+      kind: form.kind,
+      period: form.period,
     };
     const ok = existing ? await update("expenses", existing.id, row) : !!(await insert("expenses", { ...row, created_by: me }));
     if (ok) onClose();
@@ -393,13 +434,14 @@ export function ExpenseModal({ expense, preset, onClose }: { expense: Expense | 
   const linkedTitle =
     form.linked_type === "itinerary" ? rows.itinerary_items.find((i) => i.id === form.linked_id)?.title :
     form.linked_type === "flight" ? (() => { const f = rows.flights.find((x) => x.id === form.linked_id); return f ? `${f.from_code}→${f.to_code} flight` : undefined; })() :
-    form.linked_type === "stay" ? rows.stays.find((s) => s.id === form.linked_id)?.name : undefined;
+    form.linked_type === "stay" ? rows.stays.find((s) => s.id === form.linked_id)?.name :
+    form.linked_type === "list_item" ? rows.list_items.find((i) => i.id === form.linked_id)?.title : undefined;
 
   return (
     <Modal
       open={!!expense}
       onClose={onClose}
-      title={existing ? "Expense" : form.is_deposit ? "Add a deposit" : form.linked_type ? "Mark as paid" : "Add an expense"}
+      title={existing ? (form.kind === "income" ? "Money in" : "Expense") : form.kind === "income" ? (form.linked_type ? "Mark as received" : "Add money in") : form.is_deposit ? "Add a deposit" : form.linked_type ? "Mark as paid" : "Add an expense"}
       footer={
         canEdit && (
           <>
@@ -420,8 +462,19 @@ export function ExpenseModal({ expense, preset, onClose }: { expense: Expense | 
           {linkedTitle && (
             <p className="field-full small">
               Payment for <strong>{linkedTitle}</strong>
-              <label className="row" style={{ marginTop: 6 }}><input type="checkbox" checked={form.is_deposit} onChange={(e) => set("is_deposit", e.target.checked)} /> This is a deposit (more to pay later)</label>
+              {form.kind !== "income" && <label className="row" style={{ marginTop: 6 }}><input type="checkbox" checked={form.is_deposit} onChange={(e) => set("is_deposit", e.target.checked)} /> This is a deposit (more to pay later)</label>}
+              {form.period && <span className="tiny muted" style={{ display: "block", marginTop: 4 }}>For the {formatDay(form.period, { weekday: undefined, year: "numeric" })} payment</span>}
             </p>
+          )}
+          {!form.linked_type && (
+            <div className="field field-full">
+              <Segmented<"expense" | "income">
+                value={form.kind}
+                onChange={(k) => set("kind", k)}
+                options={[{ value: "expense", label: "Money out" }, { value: "income", label: "Money in" }]}
+              />
+              {form.kind === "income" && <span className="field-hint">Sponsorships, gifts, refunds, reimbursements. Whoever received it owes everyone their share.</span>}
+            </div>
           )}
           <Field label="What for" full><input className="input" value={form.title} onChange={(e) => set("title", e.target.value)} placeholder="Ghost tour tickets" required /></Field>
           <Field label="Amount"><input className="input" type="number" min="0" step="0.01" value={form.amount} onChange={(e) => set("amount", e.target.value)} required /></Field>
@@ -445,13 +498,13 @@ export function ExpenseModal({ expense, preset, onClose }: { expense: Expense | 
             </select>
           </Field>
           <Field label="Date"><input className="input" type="date" value={form.spent_on} onChange={(e) => set("spent_on", e.target.value)} /></Field>
-          <Field label="Who paid" full>
+          <Field label={form.kind === "income" ? "Who received it" : "Who paid"} full>
             <select className="input" value={form.paid_by} onChange={(e) => set("paid_by", e.target.value)}>
               <option value="">Not sure</option>
               {people.map((p) => <option key={p} value={p}>{nameOf(p)}</option>)}
             </select>
           </Field>
-          <Field label="Split between" full>
+          <Field label={form.kind === "income" ? "Belongs to" : "Split between"} full>
             <PersonPicker people={people} value={form.split_between} onChange={(v) => set("split_between", v)} nameOf={nameOf} colorOf={colorOf} />
           </Field>
           <div className="field field-full">

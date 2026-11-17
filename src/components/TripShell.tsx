@@ -12,33 +12,62 @@ import { TopBar } from "./AppChrome";
 import { useTrip } from "./TripProvider";
 import { Avatar } from "./ui/Fields";
 import { Modal } from "./ui/Modal";
+import { NewListModal } from "./lists/NewListModal";
+import { NewPageModal } from "./pages/PagesIndex";
+import { breadcrumbs, childPages } from "@/lib/pages";
+import { Plus } from "lucide-react";
 import { fontHref, readableOn, themeVars } from "@/lib/themes";
 
-export const NAV = [
-  { slug: "", label: "My view", icon: Home },
-  { slug: "today", label: "Today", icon: Sun },
-  { slug: "ideas", label: "Ideas", icon: Lightbulb },
-  { slug: "itinerary", label: "Itinerary", icon: CalendarDays },
-  { slug: "flights", label: "Flights", icon: Plane },
-  { slug: "stays", label: "Stays", icon: BedDouble },
-  { slug: "budget", label: "Budget", icon: Wallet },
-  { slug: "packing", label: "Packing", icon: Luggage },
-  { slug: "map", label: "Map", icon: Map },
-  { slug: "notes", label: "Notes & journal", icon: NotebookPen },
-  { slug: "photos", label: "Photos", icon: Camera },
-  { slug: "scrapbook", label: "Scrapbook", icon: BookHeart },
-  { slug: "people", label: "People & sharing", icon: Users },
-  { slug: "settings", label: "Trip settings", icon: Settings2 },
-];
+export const MODULE_ICONS: Record<string, typeof Home> = {
+  today: Sun,
+  ideas: Lightbulb,
+  itinerary: CalendarDays,
+  flights: Plane,
+  stays: BedDouble,
+  budget: Wallet,
+  packing: Luggage,
+  map: Map,
+  notes: NotebookPen,
+  photos: Camera,
+  scrapbook: BookHeart,
+};
 
-const MOBILE_MAIN = ["", "ideas", "itinerary", "budget"];
+interface NavItem {
+  slug: string;
+  label: string;
+  icon: typeof Home;
+}
+
+/** Navigation for a space: My view, its switched-on modules, then people and settings. */
+export function useSpaceNav(): NavItem[] {
+  const { modules, template } = useTrip();
+  const noun = template.noun.charAt(0).toUpperCase() + template.noun.slice(1);
+  return useMemo(
+    () => [
+      { slug: "", label: "My view", icon: Home },
+      ...modules.map((m) => ({ slug: m.slug, label: m.name, icon: MODULE_ICONS[m.id] ?? Sun })),
+      { slug: "people", label: "People & sharing", icon: Users },
+      { slug: "settings", label: `${noun} settings`, icon: Settings2 },
+    ],
+    [modules, noun],
+  );
+}
+
 
 export function TripShell({ children }: { children: React.ReactNode }) {
-  const { trip, loading, error, offline, view, online, me, tripId, setPresencePage, nameOf, colorOf } = useTrip();
+  const { trip, loading, error, offline, view, online, me, tripId, setPresencePage, nameOf, colorOf, noun, rows, canEdit } = useTrip();
+  const NAV = useSpaceNav();
+  // Phone bottom bar: home plus the first three modules (skipping Today, which lives on Home).
+  const MOBILE_MAIN = ["", ...NAV.filter((n) => n.slug && n.slug !== "today" && n.slug !== "people" && n.slug !== "settings").slice(0, 3).map((n) => n.slug)];
   const pathname = usePathname();
   const base = `/trips/${tripId}`;
-  const current = pathname.replace(base, "").replace(/^\//, "").split("/")[0];
+  const parts = pathname.replace(base, "").replace(/^\//, "").split("/");
+  const current = parts[0];
+  const currentList = current === "lists" ? parts[1] : null;
+  const currentPage = current === "pages" ? parts[1] ?? null : null;
   const [moreOpen, setMoreOpen] = useState(false);
+  const [newList, setNewList] = useState(false);
+  const [newPage, setNewPage] = useState(false);
   const theme = view.theme as Required<typeof view.theme>;
 
   useEffect(() => {
@@ -77,7 +106,7 @@ export function TripShell({ children }: { children: React.ReactNode }) {
         <TopBar />
         <div className="auth-wrap" style={{ minHeight: "60dvh" }}>
           <div className="card auth-card" style={{ textAlign: "center", padding: "2rem" }}>
-            <h2>Can&apos;t open this trip</h2>
+            <h2>Can&apos;t open this {noun}</h2>
             <p className="muted" style={{ margin: "0.6rem 0 1rem" }}>{error}</p>
             <Link className="btn btn-primary" href="/trips">Back to my trips</Link>
           </div>
@@ -104,7 +133,7 @@ export function TripShell({ children }: { children: React.ReactNode }) {
                   color={colorOf(p.user_id)}
                   size={28}
                   ring
-                  title={`${nameOf(p.user_id)} is on ${NAV.find((n) => n.slug === (p.page === "home" ? "" : p.page))?.label ?? "the trip"}`}
+                  title={`${nameOf(p.user_id)} is on ${NAV.find((n) => n.slug === (p.page === "home" ? "" : p.page))?.label ?? `the ${noun}`}`}
                 />
               ))}
             </div>
@@ -122,9 +151,34 @@ export function TripShell({ children }: { children: React.ReactNode }) {
             const here = others.filter((p) => (p.page === "home" ? "" : p.page) === n.slug);
             return (
               <div key={n.slug}>
-                {i === 1 && <div className="nav-label">Plan</div>}
-                {i === 9 && <div className="nav-label">Remember</div>}
-                {i === 12 && <div className="nav-label">Trip</div>}
+                {i === NAV.length - 2 && (
+                  <>
+                    {(rows.pages.length > 0 || canEdit) && (
+                      <>
+                        <Link href={`${base}/pages`} className="nav-label nav-label-link">Pages</Link>
+                        <PageTree base={base} pages={rows.pages} current={currentPage} />
+                        {canEdit && (
+                          <button className="nav-add" onClick={() => setNewPage(true)}>
+                            <Plus size={16} /> New page
+                          </button>
+                        )}
+                      </>
+                    )}
+                    <div className="nav-label">Lists</div>
+                    {rows.lists.map((l) => (
+                      <Link key={l.id} href={`${base}/lists/${l.id}`} className={clsx(currentList === l.id && "active")}>
+                        <span aria-hidden style={{ width: 18, textAlign: "center" }}>{l.icon}</span>
+                        <span className="truncate">{l.name}</span>
+                      </Link>
+                    ))}
+                    {canEdit && (
+                      <button className="nav-add" onClick={() => setNewList(true)}>
+                        <Plus size={16} /> New list
+                      </button>
+                    )}
+                    <div className="nav-label">{noun}</div>
+                  </>
+                )}
                 <Link href={n.slug ? `${base}/${n.slug}` : base} className={clsx(current === n.slug && "active")}>
                   <n.icon size={18} />
                   {n.label}
@@ -163,7 +217,63 @@ export function TripShell({ children }: { children: React.ReactNode }) {
             </Link>
           ))}
         </div>
+        {(rows.pages.length > 0 || canEdit) && (
+          <>
+            <div className="nav-label" style={{ padding: "1rem 0 0.4rem" }}>Pages</div>
+            <div className="more-sheet">
+              {childPages(rows.pages, null).map((p) => (
+                <Link key={p.id} href={`${base}/pages/${p.id}`} onClick={() => setMoreOpen(false)}>
+                  <span style={{ fontSize: 22 }} aria-hidden>{p.icon}</span>
+                  <span className="truncate" style={{ maxWidth: "100%" }}>{p.title || "Untitled"}</span>
+                </Link>
+              ))}
+              {canEdit && (
+                <button className="more-add" onClick={() => { setMoreOpen(false); setNewPage(true); }}>
+                  <Plus size={22} />
+                  New page
+                </button>
+              )}
+            </div>
+          </>
+        )}
+        {(rows.lists.length > 0 || canEdit) && (
+          <>
+            <div className="nav-label" style={{ padding: "1rem 0 0.4rem" }}>Lists</div>
+            <div className="more-sheet">
+              {rows.lists.map((l) => (
+                <Link key={l.id} href={`${base}/lists/${l.id}`} onClick={() => setMoreOpen(false)}>
+                  <span style={{ fontSize: 22 }} aria-hidden>{l.icon}</span>
+                  {l.name}
+                </Link>
+              ))}
+              {canEdit && (
+                <button className="more-add" onClick={() => { setMoreOpen(false); setNewList(true); }}>
+                  <Plus size={22} />
+                  New list
+                </button>
+              )}
+            </div>
+          </>
+        )}
       </Modal>
+      <NewListModal open={newList} onClose={() => setNewList(false)} />
+      <NewPageModal open={newPage} onClose={() => setNewPage(false)} />
     </div>
   );
+}
+
+/** Top-level pages, with the open page's branch expanded. */
+function PageTree({ base, pages, current }: { base: string; pages: import("@/lib/pages").Page[]; current: string | null }) {
+  const open = new Set(current ? breadcrumbs(pages, current).map((p) => p.id) : []);
+  const render = (parent: string | null, depth: number): React.ReactNode =>
+    childPages(pages, parent).map((p) => (
+      <div key={p.id}>
+        <Link href={`${base}/pages/${p.id}`} className={clsx(current === p.id && "active")} style={depth ? { paddingLeft: `${0.75 + depth * 0.9}rem` } : undefined}>
+          <span aria-hidden style={{ width: 18, textAlign: "center" }}>{p.icon}</span>
+          <span className="truncate">{p.title || "Untitled"}</span>
+        </Link>
+        {open.has(p.id) && depth < 4 && render(p.id, depth + 1)}
+      </div>
+    ));
+  return <>{render(null, 0)}</>;
 }
