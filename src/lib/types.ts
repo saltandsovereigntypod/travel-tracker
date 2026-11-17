@@ -11,6 +11,32 @@ export interface Place {
   lng?: number;
 }
 
+export type CostUnit = "person" | "pair" | "people" | "group" | "night" | "hour" | "car" | "room" | "custom";
+
+/** Price plus what it's "per". Shared by ideas, plans, flights and stays. */
+export interface CostFields {
+  cost_unit: CostUnit;
+  cost_unit_size: number | null;
+  cost_qty: number | null;
+  cost_unit_label: string;
+}
+
+export type SplitMode = "equal" | "shares" | "exact";
+export type LinkedType = "itinerary" | "flight" | "stay";
+
+export interface Household {
+  id: string;
+  name: string;
+  created_by: string | null;
+}
+
+export interface HouseholdMember {
+  household_id: string;
+  user_id: string;
+  status: "pending" | "accepted";
+  invited_by: string | null;
+}
+
 export interface Profile {
   id: string;
   display_name: string;
@@ -59,7 +85,7 @@ export interface Invite {
 
 export type IdeaStatus = "open" | "planned" | "maybe" | "passed";
 
-export interface Idea {
+export interface Idea extends CostFields {
   id: string;
   trip_id: string;
   title: string;
@@ -82,7 +108,7 @@ export interface Vote {
   value: 1 | -1;
 }
 
-export interface ItineraryItem {
+export interface ItineraryItem extends CostFields {
   id: string;
   trip_id: string;
   day: string | null;
@@ -95,13 +121,14 @@ export interface ItineraryItem {
   url: string | null;
   cost: number | null;
   idea_id: string | null;
+  participants: string[];
   sort_order: number;
   created_by: string | null;
   created_at: string;
   updated_at: string;
 }
 
-export interface Flight {
+export interface Flight extends CostFields {
   id: string;
   trip_id: string;
   airline: string;
@@ -125,7 +152,7 @@ export interface Flight {
 
 export type StayKind = "hotel" | "hostel" | "rental" | "bnb" | "friends" | "camping" | "other";
 
-export interface Stay {
+export interface Stay extends CostFields {
   id: string;
   trip_id: string;
   name: string;
@@ -158,6 +185,11 @@ export interface Expense {
   category: string;
   paid_by: string | null;
   split_between: string[];
+  split_mode: SplitMode;
+  split_shares: Record<string, number>;
+  linked_type: LinkedType | null;
+  linked_id: string | null;
+  is_deposit: boolean;
   spent_on: string | null;
   notes: string;
   created_by: string | null;

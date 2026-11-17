@@ -580,3 +580,31 @@ input[type="checkbox"] { accent-color: var(--accent); width: 18px; height: 18px;
 .legal p, .legal li { line-height: 1.65; }
 .legal ul { list-style: disc; padding-left: 1.2rem; margin: 0.4rem 0; display: flex; flex-direction: column; gap: 0.35rem; }
 .legal a { color: var(--accent); }
+
+/* Cost editor, payments and split editor */
+.cost-row { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
+.cost-row > .input:first-child { width: 120px; flex: none; }
+.cost-row > select.input { width: auto; flex: 1 1 160px; }
+.cost-inline { display: inline-flex; align-items: center; gap: 0.35rem; font-size: 0.85rem; color: var(--muted); }
+.cost-inline .input { width: 80px; }
+.cost-summary { font-size: 0.85rem; font-weight: 600; color: var(--accent2); background: var(--soft2); padding: 0.35rem 0.6rem; border-radius: 8px; align-self: flex-start; }
+.pay-status { display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.75rem; font-weight: 700; padding: 0.15rem 0.55rem; border-radius: 999px; white-space: nowrap; }
+.pay-unpaid { background: color-mix(in srgb, var(--accent) 14%, var(--surface)); color: color-mix(in srgb, var(--accent) 80%, var(--ink)); }
+.pay-deposit { background: color-mix(in srgb, #E9C46A 30%, var(--surface)); color: color-mix(in srgb, #8a6d00 85%, var(--ink)); }
+.pay-paid { background: color-mix(in srgb, var(--success) 15%, var(--surface)); color: var(--success); }
+.pay-panel { border: 1px solid var(--border); border-radius: 12px; padding: 0.8rem; display: flex; flex-direction: column; gap: 0.6rem; }
+.split-grid { display: grid; grid-template-columns: 1fr 110px; gap: 0.4rem 0.6rem; align-items: center; }
+.split-grid .input { min-height: 36px; }
+.vote-big { min-height: 34px; padding: 0.3rem 0.8rem; font-size: 0.9rem; }
+.voters { display: flex; align-items: center; gap: 0.3rem; font-size: 0.75rem; color: var(--muted); }
+.badge-in { background: color-mix(in srgb, var(--success) 16%, var(--surface)); color: var(--success); }
+.day-chips { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+.day-chips button { border: 1px solid var(--border); background: var(--surface); color: var(--ink); border-radius: 10px; padding: 0.4rem 0.6rem; cursor: pointer; font: 600 0.82rem var(--font-body); display: flex; flex-direction: column; align-items: center; min-width: 64px; }
+.day-chips button small { font-weight: 500; color: var(--muted); font-size: 0.7rem; }
+.day-chips button.on { border-color: var(--accent); background: var(--soft); color: var(--accent); }
+.itin-with-tray { display: grid; grid-template-columns: minmax(0, 1fr) 290px; gap: 1rem; align-items: start; }
+.ideas-tray { position: sticky; top: 72px; max-height: calc(100dvh - 100px); overflow: auto; display: flex; flex-direction: column; gap: 0.5rem; }
+.tray-idea { display: flex; gap: 0.5rem; align-items: center; padding: 0.55rem 0.65rem; border-radius: 10px; border: 1px dashed var(--accent); background: var(--surface); cursor: grab; touch-action: none; font-size: 0.88rem; }
+.tray-idea:active { cursor: grabbing; }
+@media (max-width: 1100px) { .itin-with-tray { grid-template-columns: 1fr; } .ideas-tray { display: none; } }
+@media (max-width: 1100px) { .hide-tablet { display: none; } }

@@ -7,6 +7,7 @@ import { useAuth } from "@/components/AuthProvider";
 import { Avatar, Field } from "@/components/ui/Fields";
 import { useToast } from "@/components/ui/Toast";
 import { shrinkImage } from "@/components/sections/Photos";
+import { HouseholdCard } from "@/components/settings/HouseholdCard";
 import { friendlyError, supabase } from "@/lib/supabase";
 
 function SettingsInner() {
@@ -77,6 +78,7 @@ function SettingsInner() {
             </form>
             <p className="tiny muted">Signed in as {user?.email}</p>
           </div>
+          <HouseholdCard />
           <form className="card stack" onSubmit={changePassword}>
             <h3>Password</h3>
             <Field label="New password" hint="At least 8 characters."><input className="input" type="password" minLength={8} value={pw} onChange={(e) => setPw(e.target.value)} autoComplete="new-password" /></Field>

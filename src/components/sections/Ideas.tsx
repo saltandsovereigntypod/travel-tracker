@@ -7,12 +7,17 @@ import clsx from "clsx";
 import { useTrip } from "../TripProvider";
 import { Modal } from "../ui/Modal";
 import { Avatar, EmptyState, Field, PlaceSearch, Segmented } from "../ui/Fields";
+import { CostEditor, costColumns, costValueFrom, type CostValue } from "../ui/CostEditor";
+import { ideaTotal } from "./money";
+import { orderForTime, itemsForDay } from "./itinerary-order";
+import { pickCost, unitLabel } from "@/lib/costs";
 import { CommentThread, useCommentCount } from "./Comments";
 import { CATEGORIES, categoryOf } from "@/lib/categories";
 import { formatDay, formatMoney, hostname, normalizeUrl, tripDays } from "@/lib/format";
 import type { Idea, IdeaStatus, Place } from "@/lib/types";
+import { Check } from "lucide-react";
 
-type Filter = "all" | IdeaStatus;
+type Filter = "all" | "tovote" | IdeaStatus;
 
 export function useIdeaScores() {
   const { rows } = useTrip();
@@ -28,8 +33,15 @@ export function useIdeaScores() {
   }, [rows.idea_votes]);
 }
 
+/** Has everyone who's going voted yes? */
+export function useEveryoneIn() {
+  const { rows, goingIds } = useTrip();
+  return (ideaId: string) =>
+    goingIds.length > 1 && goingIds.every((u) => rows.idea_votes.some((v) => v.idea_id === ideaId && v.user_id === u && v.value > 0));
+}
+
 export function IdeasSection({ compact = false, limit }: { compact?: boolean; limit?: number }) {
-  const { rows, canEdit, tripId } = useTrip();
+  const { rows, canEdit, tripId, me, trip, goingIds, householdOf } = useTrip();
   const scores = useIdeaScores();
   const [filter, setFilter] = useState<Filter>("all");
   const [sort, setSort] = useState<"top" | "new">("top");
@@ -38,14 +50,26 @@ export function IdeasSection({ compact = false, limit }: { compact?: boolean; li
   const [scheduling, setScheduling] = useState<Idea | null>(null);
 
   const counts = useMemo(() => {
-    const c: Record<string, number> = { all: rows.ideas.length, open: 0, maybe: 0, planned: 0, passed: 0 };
-    rows.ideas.forEach((i) => (c[i.status] = (c[i.status] ?? 0) + 1));
+    const c: Record<string, number> = { all: rows.ideas.length, open: 0, maybe: 0, planned: 0, passed: 0, tovote: 0 };
+    rows.ideas.forEach((i) => {
+      c[i.status] = (c[i.status] ?? 0) + 1;
+      if ((i.status === "open" || i.status === "maybe") && !rows.idea_votes.some((v) => v.idea_id === i.id && v.user_id === me)) c.tovote++;
+    });
     return c;
-  }, [rows.ideas]);
+  }, [rows.ideas, rows.idea_votes, me]);
+  const wishlist = rows.ideas
+    .filter((i) => i.status === "open" || i.status === "maybe")
+    .reduce((n, i) => n + (ideaTotal(i, goingIds, householdOf) ?? 0), 0);
 
   const list = useMemo(() => {
     // "All" hides passed ideas in the compact block so it stays focused.
-    let l = rows.ideas.filter((i) => (filter === "all" ? !(compact && i.status === "passed") : i.status === filter));
+    let l = rows.ideas.filter((i) =>
+      filter === "all"
+        ? !(compact && i.status === "passed")
+        : filter === "tovote"
+          ? (i.status === "open" || i.status === "maybe") && !rows.idea_votes.some((v) => v.idea_id === i.id && v.user_id === me)
+          : i.status === filter,
+    );
     if (category) l = l.filter((i) => i.category === category);
     l = [...l].sort((a, b) =>
       sort === "top"
@@ -53,7 +77,7 @@ export function IdeasSection({ compact = false, limit }: { compact?: boolean; li
         : b.created_at.localeCompare(a.created_at),
     );
     return limit ? l.slice(0, limit) : l;
-  }, [rows.ideas, filter, category, sort, scores, limit, compact]);
+  }, [rows.ideas, rows.idea_votes, me, filter, category, sort, scores, limit, compact]);
 
   return (
     <div>
@@ -61,7 +85,10 @@ export function IdeasSection({ compact = false, limit }: { compact?: boolean; li
         <div className="section-head">
           <div>
             <h1>Ideas</h1>
-            <p>Everything anyone wants to do. Vote, comment, then add the winners to the itinerary.</p>
+            <p>
+              Everything anyone wants to do. Vote, comment, then add the winners to the itinerary.
+              {wishlist > 0 && <> Doing every open idea would cost about <strong>{formatMoney(wishlist, trip?.currency)}</strong>.</>}
+            </p>
           </div>
           {canEdit && (
             <button className="btn btn-primary" onClick={() => setEditing("new")}>
@@ -77,6 +104,7 @@ export function IdeasSection({ compact = false, limit }: { compact?: boolean; li
             onChange={setFilter}
             options={[
               { value: "all", label: "All", count: counts.all },
+              { value: "tovote", label: "To vote", count: counts.tovote },
               { value: "open", label: "New", count: counts.open },
               { value: "maybe", label: "Maybe", count: counts.maybe },
               { value: "planned", label: "Planned", count: counts.planned },
@@ -122,8 +150,10 @@ export function IdeasSection({ compact = false, limit }: { compact?: boolean; li
 }
 
 function IdeaCard({ idea, compact, onEdit, onSchedule }: { idea: Idea; compact?: boolean; onEdit: () => void; onSchedule: () => void }) {
-  const { me, rows, vote, nameOf, colorOf, canEdit, trip } = useTrip();
+  const { me, rows, vote, nameOf, colorOf, canEdit, trip, goingIds, householdOf } = useTrip();
   const scores = useIdeaScores();
+  const everyoneIn = useEveryoneIn()(idea.id);
+  const total = ideaTotal(idea, goingIds, householdOf);
   const s = scores[idea.id] ?? { up: 0, down: 0, score: 0 };
   const mine = rows.idea_votes.find((v) => v.idea_id === idea.id && v.user_id === me)?.value ?? 0;
   const comments = useCommentCount("idea", idea.id);
@@ -149,11 +179,17 @@ function IdeaCard({ idea, compact, onEdit, onSchedule }: { idea: Idea; compact?:
           </button>
           {idea.status === "planned" && <span className="chip chip-ok">Planned</span>}
           {idea.status === "maybe" && <span className="chip chip-2">Maybe</span>}
+          {idea.status !== "planned" && everyoneIn && <span className="chip badge-in"><Check size={12} /> Everyone&apos;s in</span>}
         </div>
         {!compact && idea.description && <p className="muted small" style={{ display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{idea.description}</p>}
         <div className="chip-row">
           {!compact && <span className="chip">{cat.emoji} {cat.label}</span>}
-          {idea.est_cost != null && <span className="chip chip-muted">{formatMoney(idea.est_cost, trip?.currency)}</span>}
+          {idea.est_cost != null && (
+            <span className="chip chip-muted" title={`${formatMoney(idea.est_cost, trip?.currency)} ${unitLabel(pickCost(idea))}`}>
+              {formatMoney(idea.est_cost, trip?.currency)} {idea.cost_unit !== "group" && unitLabel(pickCost(idea))}
+              {total != null && idea.cost_unit !== "group" && <> · ≈{formatMoney(total, trip?.currency, true)}</>}
+            </span>
+          )}
           {idea.location?.name && !compact && <span className="chip chip-muted"><MapPin size={12} /> {idea.location.name}</span>}
           {idea.url && (
             <a className="chip chip-2" href={idea.url} target="_blank" rel="noopener noreferrer">
@@ -161,6 +197,12 @@ function IdeaCard({ idea, compact, onEdit, onSchedule }: { idea: Idea; compact?:
             </a>
           )}
         </div>
+        {voters.length > 0 && (
+          <span className="voters">
+            <span className="avatar-stack">{voters.map((u) => <Avatar key={u} name={nameOf(u)} color={colorOf(u)} size={18} />)}</span>
+            {voters.map((u) => nameOf(u).split(" ")[0]).join(", ")} 👍
+          </span>
+        )}
         {!compact && (
           <span className="row tiny muted" style={{ marginTop: "auto" }}>
             <Avatar name={nameOf(idea.created_by)} color={colorOf(idea.created_by)} size={18} /> Added by {nameOf(idea.created_by)}
@@ -168,10 +210,10 @@ function IdeaCard({ idea, compact, onEdit, onSchedule }: { idea: Idea; compact?:
         )}
       </div>
       <div className="idea-foot">
-        <button className={clsx("vote-btn", mine === 1 && "on")} onClick={() => vote(idea.id, mine === 1 ? 0 : 1)} aria-label="Vote up" title={voters.map(nameOf).join(", ") || "Vote up"}>
+        <button className={clsx("vote-btn vote-big", mine === 1 && "on")} onClick={() => vote(idea.id, mine === 1 ? 0 : 1)} aria-label="Vote up" title={voters.map(nameOf).join(", ") || "Vote up"}>
           <ThumbsUp size={14} /> {s.up}
         </button>
-        <button className={clsx("vote-btn down", mine === -1 && "on")} onClick={() => vote(idea.id, mine === -1 ? 0 : -1)} aria-label="Vote down">
+        <button className={clsx("vote-btn vote-big down", mine === -1 && "on")} onClick={() => vote(idea.id, mine === -1 ? 0 : -1)} aria-label="Vote down">
           <ThumbsDown size={14} /> {s.down || ""}
         </button>
         <button className="vote-btn" onClick={onEdit} aria-label="Comments">
@@ -188,10 +230,13 @@ function IdeaCard({ idea, compact, onEdit, onSchedule }: { idea: Idea; compact?:
   );
 }
 
-const blankIdea = { title: "", description: "", url: "", image_url: "", category: "activity", est_cost: "", location: {} as Place, status: "open" as IdeaStatus };
+const blankIdea = {
+  title: "", description: "", url: "", image_url: "", category: "activity",
+  cost: costValueFrom(null, null, "person") as CostValue, location: {} as Place, status: "open" as IdeaStatus,
+};
 
 function IdeaModal({ idea, onClose, onSchedule }: { idea: Idea | "new" | null; onClose: () => void; onSchedule: (i: Idea) => void }) {
-  const { insert, update, remove, canEdit, trip, me } = useTrip();
+  const { insert, update, remove, canEdit, trip, me, goingIds, householdOf } = useTrip();
   const isNew = idea === "new";
   const existing = idea && idea !== "new" ? idea : null;
   const [form, setForm] = useState(blankIdea);
@@ -207,7 +252,7 @@ function IdeaModal({ idea, onClose, onSchedule }: { idea: Idea | "new" | null; o
             url: existing.url ?? "",
             image_url: existing.image_url ?? "",
             category: existing.category,
-            est_cost: existing.est_cost?.toString() ?? "",
+            cost: costValueFrom(existing.est_cost, existing),
             location: existing.location ?? {},
             status: existing.status,
           }
@@ -225,7 +270,7 @@ function IdeaModal({ idea, onClose, onSchedule }: { idea: Idea | "new" | null; o
       url: normalizeUrl(form.url),
       image_url: normalizeUrl(form.image_url),
       category: form.category,
-      est_cost: form.est_cost === "" ? null : Number(form.est_cost),
+      ...costColumns(form.cost, "est_cost"),
       location: form.location,
       status: form.status,
     };
@@ -280,9 +325,14 @@ function IdeaModal({ idea, onClose, onSchedule }: { idea: Idea | "new" | null; o
                 {CATEGORIES.map((c) => <option key={c.id} value={c.id}>{c.emoji} {c.label}</option>)}
               </select>
             </Field>
-            <Field label={`Rough cost (${trip?.currency ?? "USD"})`}>
-              <input className="input" type="number" min="0" step="0.01" value={form.est_cost} onChange={(e) => set("est_cost", e.target.value)} placeholder="Optional" />
-            </Field>
+            <CostEditor
+              value={form.cost}
+              onChange={(v) => set("cost", v)}
+              participants={goingIds}
+              currency={trip?.currency ?? "USD"}
+              householdOf={householdOf}
+              label="Rough cost (estimate uses everyone going)"
+            />
             <Field label="Link" full>
               <input className="input" value={form.url} onChange={(e) => set("url", e.target.value)} placeholder="Website, TikTok, Instagram, review…" />
             </Field>
@@ -322,17 +372,11 @@ function IdeaModal({ idea, onClose, onSchedule }: { idea: Idea | "new" | null; o
   );
 }
 
-export function ScheduleModal({ idea, onClose }: { idea: Idea | null; onClose: () => void }) {
-  const { trip, insert, update, rows } = useTrip();
-  const days = tripDays(trip?.start_date ?? null, trip?.end_date ?? null);
-  const [day, setDay] = useState("");
-  const [time, setTime] = useState("");
-  const [busy, setBusy] = useState(false);
-
-  async function save() {
-    if (!idea) return;
-    setBusy(true);
-    const order = rows.itinerary_items.filter((i) => i.day === (day || null)).length;
+/** Turn an idea into an itinerary plan (shared by the Schedule button and drag-to-day). */
+export function useScheduleIdea() {
+  const { insert, update, rows } = useTrip();
+  return async (idea: Idea, day: string | null, time: string | null, participants: string[] = []) => {
+    const start = time ? (time.length === 5 ? `${time}:00` : time) : null;
     const item = await insert("itinerary_items", {
       title: idea.title,
       notes: idea.description,
@@ -340,15 +384,36 @@ export function ScheduleModal({ idea, onClose }: { idea: Idea | null; onClose: (
       location: idea.location,
       url: idea.url,
       cost: idea.est_cost,
+      ...pickCost(idea),
+      participants,
       idea_id: idea.id,
-      day: day || null,
-      start_time: time || null,
-      sort_order: order,
+      day,
+      start_time: start,
+      sort_order: orderForTime(itemsForDay(rows.itinerary_items, day), start),
     });
     if (item) await update("ideas", idea.id, { status: "planned" });
+    return item;
+  };
+}
+
+export function ScheduleModal({ idea, onClose }: { idea: Idea | null; onClose: () => void }) {
+  const { trip, rows } = useTrip();
+  const schedule = useScheduleIdea();
+  const days = tripDays(trip?.start_date ?? null, trip?.end_date ?? null);
+  const [day, setDay] = useState<string>("");
+  const [time, setTime] = useState("");
+  const [who, setWho] = useState<"everyone" | "voters">("everyone");
+  const [busy, setBusy] = useState(false);
+  const voters = idea ? rows.idea_votes.filter((v) => v.idea_id === idea.id && v.value > 0).map((v) => v.user_id) : [];
+
+  async function save() {
+    if (!idea) return;
+    setBusy(true);
+    await schedule(idea, day || null, time || null, who === "voters" ? voters : []);
     setBusy(false);
     setDay("");
     setTime("");
+    setWho("everyone");
     onClose();
   }
 
@@ -366,16 +431,30 @@ export function ScheduleModal({ idea, onClose }: { idea: Idea | null; onClose: (
       }
     >
       <div className="stack">
-        <Field label="Day">
-          <select className="input" value={day} onChange={(e) => setDay(e.target.value)}>
-            <option value="">Not sure yet (unscheduled)</option>
+        <div className="field">
+          <span className="field-label">Which day?</span>
+          <div className="day-chips">
             {days.map((d, i) => (
-              <option key={d} value={d}>Day {i + 1} · {formatDay(d)}</option>
+              <button key={d} type="button" className={clsx(day === d && "on")} onClick={() => setDay(d)}>
+                {formatDay(d, { weekday: "short", month: undefined, day: undefined })} {formatDay(d, { weekday: undefined, month: undefined })}
+                <small>Day {i + 1}</small>
+              </button>
             ))}
-          </select>
-        </Field>
+            <button type="button" className={clsx(day === "" && "on")} onClick={() => setDay("")}>
+              Later<small>unscheduled</small>
+            </button>
+          </div>
+        </div>
         <Field label="Time (optional)">
           <input className="input" type="time" value={time} onChange={(e) => setTime(e.target.value)} />
+        </Field>
+        <Field label="Who's doing it">
+          <Segmented<"everyone" | "voters">
+            size="sm"
+            value={who}
+            onChange={setWho}
+            options={[{ value: "everyone", label: "Everyone going" }, { value: "voters", label: `Who voted 👍 (${voters.length})` }]}
+          />
         </Field>
         {!days.length && <p className="muted small">Tip: set trip dates in Trip settings to schedule by day.</p>}
       </div>
