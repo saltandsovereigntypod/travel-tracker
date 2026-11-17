@@ -150,6 +150,10 @@ export interface Flight extends CostFields {
   travelers: string[];
   cost: number | null;
   notes: string;
+  /** Considered flights: how rough the date is (± days). 0 = exact. */
+  date_flex?: number;
+  /** Options that compete ("Outbound"). Empty = grouped by route. */
+  option_group?: string;
   created_by: string | null;
   created_at: string;
   updated_at: string;
@@ -175,6 +179,8 @@ export interface Stay extends CostFields {
   guests: string[];
   cost: number | null;
   notes: string;
+  /** Options that compete ("Week 1"). Empty = grouped by dates. */
+  option_group?: string;
   created_by: string | null;
   created_at: string;
   updated_at: string;
@@ -233,7 +239,16 @@ export interface Note {
   created_by: string | null;
   created_at: string;
   updated_at: string;
+  visibility?: Visibility;
+  visible_to?: string[];
+  linked_type?: MemoryLink | null;
+  linked_id?: string | null;
 }
+
+/** Who can see a note, journal entry or photo. Enforced by the database. */
+export type Visibility = "everyone" | "private" | "people";
+/** What a note or photo can be attached to. */
+export type MemoryLink = "itinerary" | "flight" | "stay" | "idea" | "list_item";
 
 export interface Photo {
   id: string;
@@ -246,6 +261,15 @@ export interface Photo {
   favorite: boolean;
   created_by: string | null;
   created_at: string;
+  visibility?: Visibility;
+  visible_to?: string[];
+  linked_type?: MemoryLink | null;
+  linked_id?: string | null;
+  /** When and where the camera says it was taken. */
+  taken_at?: string | null;
+  lat?: number | null;
+  lng?: number | null;
+  album?: string;
 }
 
 export type CommentEntity = "idea" | "itinerary" | "flight" | "stay" | "expense" | "note" | "photo" | "list_item" | "page";
@@ -270,6 +294,10 @@ export interface TripView {
   board_layout: BoardBlock[];
   /** Per-list view choices, private to this person. Keyed by list id. */
   list_prefs?: Record<string, ListPrefs>;
+  /** What shows on each kind of card, private to this person: { ideas: { link: false } }. */
+  card_prefs?: Record<string, Record<string, boolean>>;
+  /** This person's scrapbook design (see lib/scrapbook.ts). */
+  scrapbook?: import("./scrapbook").ScrapbookPrefs;
   updated_at: string;
 }
 

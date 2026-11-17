@@ -7,7 +7,8 @@ import { useTrip } from "../TripProvider";
 import { EmptyState, Segmented } from "../ui/Fields";
 import { ListItemModal } from "./ItemModal";
 import { ListSettings } from "./ListSettings";
-import { BoardView, CalendarView, CardsView, ChecklistView, MapListView, TableView } from "./Views";
+import { BoardView, CalendarView, CardsView, ChecklistView, MapListView, TableView, cardFieldChoices } from "./Views";
+import { CardOptions, useCardParts } from "../ui/CardOptions";
 import { useEngine } from "./engine";
 import { useIsPhone } from "../ui/hooks";
 import { useCommitItem } from "./automation";
@@ -38,6 +39,7 @@ function ListPageInner({ listId }: { listId: string }) {
   const { rows, canEdit, insert, update, trip, tripId, loading, view, saveView, me } = useTrip();
   const { money } = useEngine();
   const commit = useCommitItem();
+  const show = useCardParts("lists", listId);
   const params = useSearchParams();
   const router = useRouter();
   const phone = useIsPhone();
@@ -63,6 +65,11 @@ function ListPageInner({ listId }: { listId: string }) {
     return loading ? null : <EmptyState title="This list doesn't exist anymore">It may have been deleted.</EmptyState>;
   }
 
+  const choices = cardFieldChoices(list);
+  const fieldOn = (f: { id: string }) => {
+    const v = view.card_prefs?.[`lists:${listId}`]?.[`f:${f.id}`];
+    return typeof v === "boolean" ? v : choices.defaults.has(f.id);
+  };
   const progress = listProgress(list, all);
   const moneyTotal = all.reduce((n, i) => n + (itemMoneyTotal(i, list, money) ?? 0), 0);
   const titleLabel = (list.settings as { titleLabel?: string })?.titleLabel ?? "Name";
@@ -161,6 +168,12 @@ function ListPageInner({ listId }: { listId: string }) {
             ))}
           </select>
         )}
+        <CardOptions
+          kind="lists"
+          scope={listId}
+          title={`${list.name} cards`}
+          extra={cardFieldChoices(list).all.map((f) => ({ id: `f:${f.id}`, label: f.name, on: fieldOn(f) }))}
+        />
         {hasPeople && (
           <label className="row small" style={{ gap: 6 }}>
             <input type="checkbox" checked={!!prefs.mine} onChange={(e) => setPrefs({ mine: e.target.checked })} /> Only mine
@@ -196,7 +209,7 @@ function ListPageInner({ listId }: { listId: string }) {
           onSort={(field) => setPrefs({ sort: prefs.sort?.field === field ? (prefs.sort.dir === "asc" ? { field, dir: "desc" } : undefined) : { field, dir: "asc" } })}
         />
       ) : viewType === "cards" ? (
-        <CardsView list={list} items={items} onOpen={setOpen} />
+        <CardsView list={list} items={items} onOpen={setOpen} look={{ field: fieldOn, feeds: show("feeds"), status: show("status") }} />
       ) : viewType === "board" ? (
         <BoardView list={list} items={items} onOpen={setOpen} groupField={groupField} canEdit={canEdit} onMove={(id, value) => {
           const it = all.find((x) => x.id === id);

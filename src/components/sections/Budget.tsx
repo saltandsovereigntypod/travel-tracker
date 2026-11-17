@@ -5,6 +5,8 @@ import Link from "next/link";
 import { Plus, Trash2, Wallet, ArrowRight, Check, Pencil, Loader2, Users, HeartHandshake } from "lucide-react";
 import clsx from "clsx";
 import { useTrip } from "../TripProvider";
+import { useTravel } from "../travel/useTravel";
+import { CardOptions, useCardParts } from "../ui/CardOptions";
 import { ModuleTitle } from "../ModuleTitle";
 import { Modal } from "../ui/Modal";
 import { Avatar, EmptyState, Field, PersonPicker, Segmented } from "../ui/Fields";
@@ -34,6 +36,8 @@ export interface ExpensePreset {
 export function BudgetSection({ compact = false }: { compact?: boolean }) {
   const { rows, canEdit, updateTrip, nameOf, colorOf, insert, me, tripId, partyOf, partyName, households } = useTrip();
   const money = useMoney();
+  const travel = useTravel();
+  const show = useCardParts("expenses");
   const { cur, spent, committedTotal, stillToPay, wishlist, budget, remainingBudget, received, expectedIncome, incomeThings } = money;
   const [editing, setEditing] = useState<Expense | "new" | null>(null);
   const [preset, setPreset] = useState<ExpensePreset | null>(null);
@@ -157,6 +161,16 @@ export function BudgetSection({ compact = false }: { compact?: boolean }) {
           <small>{!budget || remainingBudget >= 0 ? "Left in budget" : "Over budget"}</small>
           <strong style={{ color: remainingBudget < 0 ? "var(--danger)" : undefined }}>{budget ? formatMoney(Math.abs(remainingBudget), cur) : "—"}</strong>
         </div>
+        {travel.estimated > 0 && (
+          <div className="card stat">
+            <small>Not booked yet</small>
+            <strong>≈ {formatMoney(travel.estimated, cur)}</strong>
+            <span className="tiny muted">
+              cheapest flight &amp; stay options
+              {travel.remainingIfBooked != null && <> · {travel.remainingIfBooked >= 0 ? `${formatMoney(travel.remainingIfBooked, cur)} left after` : `${formatMoney(-travel.remainingIfBooked, cur)} over after`}</>}
+            </span>
+          </div>
+        )}
         <div className="card stat"><small>Wishlist (ideas)</small><strong>{formatMoney(wishlist, cur)}</strong><span className="tiny muted">if you did every idea</span></div>
         <div className="card stat"><small>Your share to pay</small><strong>{formatMoney(myShareLeft, cur)}</strong></div>
         {(received > 0 || expectedIncome > 0) && (
@@ -265,7 +279,10 @@ export function BudgetSection({ compact = false }: { compact?: boolean }) {
         </div>
       </div>
 
-      <h2 style={{ margin: "1.8rem 0 0.8rem" }}>Expenses</h2>
+      <div className="row-between" style={{ margin: "1.8rem 0 0.8rem" }}>
+        <h2>Expenses</h2>
+        <CardOptions kind="expenses" title="Expense rows" />
+      </div>
       {expenses.length === 0 ? (
         <div className="card">
           <EmptyState icon={<Wallet />} title="Nothing paid yet">Use &quot;Mark as paid&quot; or &quot;Add deposit&quot; on any plan, flight or stay, or add an expense here.</EmptyState>
@@ -289,8 +306,12 @@ export function BudgetSection({ compact = false }: { compact?: boolean }) {
         <div className="grow">
           <strong className="small" style={{ display: "block" }}>{e.title}{e.is_deposit && <span className="pay-status pay-deposit" style={{ marginLeft: 6 }}>deposit</span>}</strong>
           <span className="tiny muted">
-            {e.paid_by ? `${nameOf(e.paid_by)} ${e.kind === "income" ? "received" : "paid"}` : "Unassigned"} · {splitText}
-            {e.spent_on && ` · ${formatDay(e.spent_on)}`}
+            {[
+              show("category") && c.label,
+              show("paidBy") && (e.paid_by ? `${nameOf(e.paid_by)} ${e.kind === "income" ? "received" : "paid"}` : "Unassigned"),
+              show("split") && e.kind !== "income" && splitText,
+              show("date") && e.spent_on && formatDay(e.spent_on),
+            ].filter(Boolean).join(" · ")}
           </span>
         </div>
         <div style={{ textAlign: "right" }}>
@@ -300,6 +321,51 @@ export function BudgetSection({ compact = false }: { compact?: boolean }) {
       </button>
     );
   }
+}
+
+function ExpenseDetails({ e, linkedTitle }: { e: Expense; linkedTitle?: string }) {
+  const { trip, rows, nameOf, colorOf } = useTrip();
+  const cur = trip?.currency ?? "USD";
+  const going = rows.trip_members.filter((m) => m.attendance !== "not_going").map((m) => m.user_id);
+  const amount = homeAmount(e, cur);
+  const shares = expenseShares({ amount, paid_by: e.paid_by, split_between: e.split_between, split_mode: e.split_mode, split_shares: e.split_shares }, going);
+  const c = e.category === "settlement" ? { emoji: "🤝", label: "Settle up" } : expenseCategoryOf(e.category);
+  const income = e.kind === "income";
+  return (
+    <div className="detail">
+      <div className="detail-hero">
+        <span className="cat-dot" style={{ width: 48, height: 48, fontSize: 24 }}>{c.emoji}</span>
+        <div>
+          <strong style={{ fontSize: "1.6rem", color: income ? "var(--success)" : undefined }}>{income ? "+" : ""}{formatMoney(amount, cur)}</strong>
+          {e.currency !== cur && <div className="tiny muted">{formatMoney(e.amount, e.currency)}</div>}
+          <div className="row wrap" style={{ gap: 6, marginTop: 4 }}>
+            <span className="chip chip-muted">{c.label}</span>
+            {e.is_deposit && <span className="pay-status pay-deposit">deposit</span>}
+            {income && <span className="chip chip-ok">Money in</span>}
+          </div>
+        </div>
+      </div>
+      <div className="detail-grid">
+        <div><small>{income ? "Received by" : "Paid by"}</small>{e.paid_by ? <span className="row" style={{ gap: 5 }}><Avatar name={nameOf(e.paid_by)} color={colorOf(e.paid_by)} size={18} /> {nameOf(e.paid_by)}</span> : "—"}</div>
+        <div><small>Date</small>{e.spent_on ? formatDay(e.spent_on) : "—"}</div>
+        {linkedTitle && <div><small>For</small>{linkedTitle}{e.period && <span className="tiny muted"> · {formatDay(e.period)}</span>}</div>}
+      </div>
+      {!income && e.category !== "settlement" && Object.keys(shares).length > 0 && (
+        <div className="detail-section">
+          <h3>Who owes what</h3>
+          <div className="stack" style={{ gap: 4 }}>
+            {Object.entries(shares).map(([p, v]) => (
+              <div key={p} className="row-between small">
+                <span className="row" style={{ gap: 6 }}><Avatar name={nameOf(p)} color={colorOf(p)} size={20} /> {nameOf(p)}</span>
+                <strong>{formatMoney(v, cur)}</strong>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      {e.notes && <div className="detail-section"><h3>Notes</h3><p className="detail-notes small">{e.notes}</p></div>}
+    </div>
+  );
 }
 
 function ToPayRow({ thing: c, canEdit, onPay }: { thing: CostedThing; canEdit: boolean; onPay: (p: ExpensePreset) => void }) {
@@ -343,8 +409,10 @@ export function ExpenseModal({ expense, preset, onClose }: { expense: Expense | 
   const [form, setForm] = useState(blank);
   const [loadedFor, setLoadedFor] = useState<unknown>(null);
   const [rateBusy, setRateBusy] = useState(false);
+  const [editMode, setEditMode] = useState(false);
   if (expense !== loadedFor) {
     setLoadedFor(expense);
+    setEditMode(!existing);
     setForm(
       existing
         ? {
@@ -427,10 +495,14 @@ export function ExpenseModal({ expense, preset, onClose }: { expense: Expense | 
       period: form.period,
     };
     const ok = existing ? await update("expenses", existing.id, row) : !!(await insert("expenses", { ...row, created_by: me }));
-    if (ok) onClose();
+    if (!ok) return;
+    if (existing) setEditMode(false);
+    else onClose();
   }
 
   const people = rows.trip_members.map((m) => m.user_id);
+  const live = existing ? rows.expenses.find((x) => x.id === existing.id) ?? existing : null;
+  const reading = !!live && (!editMode || !canEdit);
   const linkedTitle =
     form.linked_type === "itinerary" ? rows.itinerary_items.find((i) => i.id === form.linked_id)?.title :
     form.linked_type === "flight" ? (() => { const f = rows.flights.find((x) => x.id === form.linked_id); return f ? `${f.from_code}→${f.to_code} flight` : undefined; })() :
@@ -441,9 +513,11 @@ export function ExpenseModal({ expense, preset, onClose }: { expense: Expense | 
     <Modal
       open={!!expense}
       onClose={onClose}
-      title={existing ? (form.kind === "income" ? "Money in" : "Expense") : form.kind === "income" ? (form.linked_type ? "Mark as received" : "Add money in") : form.is_deposit ? "Add a deposit" : form.linked_type ? "Mark as paid" : "Add an expense"}
+      variant={existing ? "panel" : "dialog"}
+      actions={reading && canEdit ? <button className="btn btn-sm" onClick={() => setEditMode(true)}><Pencil size={14} /> Edit</button> : undefined}
+      title={reading && live ? live.title : existing ? (form.kind === "income" ? "Money in" : "Expense") : form.kind === "income" ? (form.linked_type ? "Mark as received" : "Add money in") : form.is_deposit ? "Add a deposit" : form.linked_type ? "Mark as paid" : "Add an expense"}
       footer={
-        canEdit && (
+        canEdit && !reading && (
           <>
             {existing && (
               <button className="btn btn-danger" type="button" onClick={async () => { if (confirm("Delete this expense?")) { await remove("expenses", existing.id); onClose(); } }}>
@@ -451,12 +525,15 @@ export function ExpenseModal({ expense, preset, onClose }: { expense: Expense | 
               </button>
             )}
             <span className="spacer" />
-            <button className="btn" type="button" onClick={onClose}>Cancel</button>
+            <button className="btn" type="button" onClick={() => (existing ? setEditMode(false) : onClose())}>Cancel</button>
             <button className="btn btn-primary" form="expense-form" disabled={!form.title.trim() || form.amount === "" || exactOff}>{existing ? "Save" : "Save payment"}</button>
           </>
         )
       }
     >
+      {reading && live ? (
+        <ExpenseDetails e={live} linkedTitle={linkedTitle} />
+      ) : (
       <form id="expense-form" className="form-grid" onSubmit={save}>
         <fieldset disabled={!canEdit} style={{ display: "contents" }}>
           {linkedTitle && (
@@ -540,6 +617,7 @@ export function ExpenseModal({ expense, preset, onClose }: { expense: Expense | 
           <Field label="Notes" full><textarea className="input textarea" rows={2} value={form.notes} onChange={(e) => set("notes", e.target.value)} /></Field>
         </fieldset>
       </form>
+      )}
     </Modal>
   );
 }

@@ -6,12 +6,13 @@ import {
   DndContext, DragOverlay, PointerSensor, TouchSensor, KeyboardSensor, useDraggable, useDroppable, useSensor, useSensors,
   type DragEndEvent, type DragStartEvent,
 } from "@dnd-kit/core";
-import { Plus, Plane, BedDouble, MapPin, ExternalLink, Trash2, CalendarDays, Clock, MessageCircle } from "lucide-react";
+import { Plus, Plane, BedDouble, MapPin, ExternalLink, Trash2, CalendarDays, Clock, MessageCircle, Pencil } from "lucide-react";
 import clsx from "clsx";
+import { LinkedMemories } from "../memories/Memories";
 import { useTrip } from "../TripProvider";
 import { ModuleTitle } from "../ModuleTitle";
 import { Modal } from "../ui/Modal";
-import { EmptyState, Field, PersonPicker, PlaceSearch, Segmented } from "../ui/Fields";
+import { Avatar, EmptyState, Field, PersonPicker, PlaceSearch, Segmented } from "../ui/Fields";
 import { CostEditor, costColumns, costValueFrom, type CostValue } from "../ui/CostEditor";
 import { PaymentPanel, PayStatus } from "./Payments";
 import { ScheduleModal, useIdeaScores, useScheduleIdea } from "./Ideas";
@@ -20,7 +21,7 @@ import type { Idea } from "@/lib/types";
 import { useMoney } from "./money";
 import { CommentThread, useCommentCount } from "./Comments";
 import { CATEGORIES, categoryOf } from "@/lib/categories";
-import { formatDay, formatMoney, formatTime, normalizeUrl, splitLocal, todayString, tripDays } from "@/lib/format";
+import { formatDay, formatMoney, formatTime, hostname, normalizeUrl, splitLocal, todayString, tripDays } from "@/lib/format";
 import { mapsLink } from "@/lib/services";
 import type { ItineraryItem, Place } from "@/lib/types";
 
@@ -30,6 +31,8 @@ export { itemsForDay, orderForTime } from "./itinerary-order";
 import { itemsForDay, orderForTime } from "./itinerary-order";
 import { calendarEntries } from "@/lib/fields";
 import { pageTasks } from "@/lib/pages";
+import { useTravel } from "../travel/useTravel";
+import { CardOptions, useCardParts } from "../ui/CardOptions";
 
 interface FixedEvent {
   key: string;
@@ -193,6 +196,7 @@ export function ItinerarySection({ compact = false }: { compact?: boolean }) {
                 <Lightbulb size={14} /> Ideas
               </button>
             )}
+            <CardOptions kind="plans" title="Plan cards" />
             {canEdit && (
               <button className="btn btn-primary" onClick={() => setEditing({ day: null })}>
                 <Plus size={16} /> Add plan
@@ -343,6 +347,8 @@ function ItemRow({ item, onOpen, draggable, overlay }: { item: ItineraryItem; on
   const drop = useDroppable({ id: `item:${item.id}`, disabled: overlay });
   const cat = categoryOf(item.category);
   const comments = useCommentCount("itinerary", item.id);
+  const fromStay = useTravel().fromStay(item);
+  const show = useCardParts("plans");
   return (
     <div
       ref={(n) => {
@@ -366,11 +372,14 @@ function ItemRow({ item, onOpen, draggable, overlay }: { item: ItineraryItem; on
       <div className="grow">
         <strong style={{ display: "block" }}>{item.title}</strong>
         <div className="row tiny muted wrap" style={{ gap: "0.5rem" }}>
-          {item.location?.name && <span className="row" style={{ gap: 2 }}><MapPin size={11} />{item.location.name}</span>}
-          {costed?.total != null && <span>{formatMoney(costed.total, trip?.currency)}</span>}
-          {costed && costed.status !== "none" && costed.status !== "unpaid" && <PayStatus thing={costed} />}
-          {comments > 0 && <span className="row" style={{ gap: 2 }}><MessageCircle size={11} />{comments}</span>}
+          {show("place") && item.location?.name && <span className="row" style={{ gap: 2 }}><MapPin size={11} />{item.location.name}</span>}
+          {show("distance") && fromStay && <span className="row" style={{ gap: 2 }} title={`From ${fromStay.stay.name}`}>🏨 {fromStay.label.split(" · ")[0]}</span>}
+          {show("price") && costed?.total != null && <span>{formatMoney(costed.total, trip?.currency)}</span>}
+          {show("payment") && costed && costed.status !== "none" && costed.status !== "unpaid" && <PayStatus thing={costed} />}
+          {show("comments") && comments > 0 && <span className="row" style={{ gap: 2 }}><MessageCircle size={11} />{comments}</span>}
+          {show("link") && item.url && <span className="row" style={{ gap: 2 }}><ExternalLink size={11} />{hostname(item.url)}</span>}
         </div>
+        {show("about") && item.notes && <span className="tiny muted itin-notes">{item.notes}</span>}
       </div>
     </div>
   );
@@ -388,9 +397,12 @@ function ItemModal({ target, onClose }: { target: ItineraryItem | { day: string 
   const [form, setForm] = useState(blank);
   const [pickDate, setPickDate] = useState(false);
   const [loadedFor, setLoadedFor] = useState<unknown>(null);
+  const [editMode, setEditMode] = useState(false);
+  const live = existing ? rows.itinerary_items.find((i) => i.id === existing.id) ?? existing : null;
   if (target !== loadedFor) {
     setLoadedFor(target);
     setPickDate(false);
+    setEditMode(!(target && "id" in target));
     if (existing) {
       setForm({
         title: existing.title,
@@ -436,19 +448,24 @@ function ItemModal({ target, onClose }: { target: ItineraryItem | { day: string 
     } else {
       ok = !!(await insert("itinerary_items", { ...row, sort_order: orderForTime(dayItems, start) }));
     }
-    if (ok) onClose();
+    if (!ok) return;
+    // Back to reading after an edit; a new plan just closes.
+    if (existing) setEditMode(false);
+    else onClose();
   }
 
   const link = existing ? mapsLink(existing.location) : null;
+  const reading = !!live && (!editMode || !canEdit);
 
   return (
     <Modal
       open={!!target}
       onClose={onClose}
-      title={existing ? (canEdit ? "Edit plan" : existing.title) : "Add a plan"}
-      size="lg"
+      title={live ? live.title : "Add a plan"}
+      variant="panel"
+      actions={reading && canEdit ? <button className="btn btn-sm" onClick={() => setEditMode(true)}><Pencil size={14} /> Edit</button> : undefined}
       footer={
-        canEdit && (
+        canEdit && !reading && (
           <>
             {existing && (
               <button
@@ -465,13 +482,15 @@ function ItemModal({ target, onClose }: { target: ItineraryItem | { day: string 
               </button>
             )}
             <span className="spacer" />
-            <button className="btn" type="button" onClick={onClose}>Cancel</button>
+            <button className="btn" type="button" onClick={() => (existing ? setEditMode(false) : onClose())}>Cancel</button>
             <button className="btn btn-primary" form="itin-form" disabled={!form.title.trim()}>{existing ? "Save" : "Add"}</button>
           </>
         )
       }
     >
-      <div style={{ display: "grid", gridTemplateColumns: existing ? "minmax(0, 1.4fr) minmax(0, 1fr)" : "1fr", gap: "1.4rem" }} className="idea-modal-grid">
+      {reading && live ? (
+        <PlanDetails item={live} />
+      ) : (
         <form id="itin-form" className="form-grid" onSubmit={save}>
           <fieldset disabled={!canEdit} style={{ display: "contents" }}>
             <Field label="What" full>
@@ -525,15 +544,61 @@ function ItemModal({ target, onClose }: { target: ItineraryItem | { day: string 
             </div>
           )}
         </form>
-        {existing && (
-          <div className="stack">
-            <PaymentPanel type="itinerary" id={existing.id} category="activities" />
-            <h3 style={{ marginTop: "0.4rem" }} className="row"><Clock size={16} /> Comments</h3>
-            <CommentThread entity="itinerary" id={existing.id} />
-          </div>
-        )}
-      </div>
+      )}
     </Modal>
+  );
+}
+
+function PlanDetails({ item }: { item: ItineraryItem }) {
+  const { trip, nameOf, colorOf, goingIds } = useTrip();
+  const travel = useTravel();
+  const money = useMoney();
+  const cat = categoryOf(item.category);
+  const costed = money.byKey[`itinerary:${item.id}`];
+  const fromStay = travel.fromStay(item);
+  const where = mapsLink(item.location);
+  const people = item.participants?.length ? item.participants : goingIds;
+  return (
+    <div className="detail">
+      <div className="row wrap" style={{ gap: 6 }}>
+        <span className="chip">{cat.emoji} {cat.label}</span>
+      </div>
+      <div className="detail-grid">
+        <div><small>When</small>{item.day ? formatDay(item.day) : "Not scheduled yet"}{item.start_time && <> · {formatTime(item.start_time)}{item.end_time && `–${formatTime(item.end_time)}`}</>}</div>
+        <div><small>Cost</small>{costed?.total != null ? formatMoney(costed.total, trip?.currency) : "—"}</div>
+      </div>
+      {(item.location?.name || item.url) && (
+        <div className="row wrap" style={{ gap: 6 }}>
+          {item.location?.name && (where ? <a className="chip chip-2" href={where} target="_blank" rel="noopener noreferrer"><MapPin size={12} /> {item.location.name}</a> : <span className="chip chip-muted"><MapPin size={12} /> {item.location.name}</span>)}
+          {item.url && <a className="chip chip-2" href={item.url} target="_blank" rel="noopener noreferrer"><ExternalLink size={12} /> {hostname(item.url)}</a>}
+        </div>
+      )}
+      {fromStay && (
+        <div className="detail-section">
+          <h3>Getting there</h3>
+          <a className="dist-row" href={fromStay.href} target="_blank" rel="noopener noreferrer">
+            <MapPin size={16} />
+            <span className="grow"><strong className="small">From {fromStay.stay.name}</strong><span className="tiny muted" style={{ display: "block" }}>{fromStay.label}</span></span>
+            <span className="tiny">Directions</span>
+          </a>
+        </div>
+      )}
+      {people.length > 0 && (
+        <div className="detail-section">
+          <h3>Who&apos;s doing this</h3>
+          <div className="row wrap" style={{ gap: 8 }}>
+            {people.map((id) => <span key={id} className="row small" style={{ gap: 5 }}><Avatar name={nameOf(id)} color={colorOf(id)} size={22} /> {nameOf(id)}</span>)}
+          </div>
+        </div>
+      )}
+      {item.notes && <div className="detail-section"><h3>Notes</h3><p className="detail-notes small">{item.notes}</p></div>}
+      <LinkedMemories type="itinerary" id={item.id} />
+      <PaymentPanel type="itinerary" id={item.id} category="activities" />
+      <div className="detail-section">
+        <h3 className="row" style={{ gap: 6 }}><Clock size={13} /> Comments</h3>
+        <CommentThread entity="itinerary" id={item.id} />
+      </div>
+    </div>
   );
 }
 

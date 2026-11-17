@@ -48,20 +48,34 @@ export function TableView({ list, items, onOpen, sortField, sortDir, onSort }: V
 }
 
 // ---------------------------------------------------------------- cards
-export function CardsView({ list, items, onOpen }: ViewProps) {
+/** Fields that can show on a card, and the ones shown by default (the first five). */
+export function cardFieldChoices(list: ListDef) {
   const sf = statusField(list);
-  const fields = list.fields
-    .filter((f) => f !== sf && ["date", "datetime", "money", "person", "people", "place", "relation", "rollup", "select", "number", "checkbox", "rating", "multiselect"].includes(f.type))
-    .slice(0, 5);
+  const all = list.fields.filter((f) => f !== sf && f.type !== "longtext" && f.type !== "repeat");
+  const preferred = all.filter((f) => ["date", "datetime", "money", "person", "people", "place", "relation", "rollup", "select", "number", "checkbox", "rating", "multiselect"].includes(f.type));
+  return { all, defaults: new Set(preferred.slice(0, 5).map((f) => f.id)) };
+}
+
+export interface CardLook {
+  /** Is this field on the card? */
+  field?: (f: FieldDef) => boolean;
+  feeds?: boolean;
+  status?: boolean;
+}
+
+export function CardsView({ list, items, onOpen, look }: ViewProps & { look?: CardLook }) {
+  const sf = statusField(list);
+  const { all, defaults } = cardFieldChoices(list);
+  const fields = all.filter((f) => (look?.field ? look.field(f) : defaults.has(f.id)));
   return (
     <div className="item-cards">
-      {items.map((i) => <ItemCard key={i.id} list={list} item={i} fields={fields} status={sf} onOpen={() => onOpen(i.id)} />)}
+      {items.map((i) => <ItemCard key={i.id} list={list} item={i} fields={fields} status={look?.status === false ? undefined : sf} feeds={look?.feeds !== false} onOpen={() => onOpen(i.id)} />)}
     </div>
   );
 }
 
-export function ItemCard({ list, item, fields, status, onOpen, dragHandle }: { list: ListDef; item: ListItem; fields: FieldDef[]; status?: FieldDef; onOpen: () => void; dragHandle?: React.ReactNode }) {
-  const feeds = itemFeeds(item, list);
+export function ItemCard({ list, item, fields, status, onOpen, dragHandle, feeds: showFeeds = true }: { list: ListDef; item: ListItem; fields: FieldDef[]; status?: FieldDef; onOpen: () => void; dragHandle?: React.ReactNode; feeds?: boolean }) {
+  const feeds = showFeeds ? itemFeeds(item, list) : [];
   return (
     <div className="card item-card" role="button" tabIndex={0} onClick={onOpen} onKeyDown={(e) => e.key === "Enter" && onOpen()}>
       <div className="row-between" style={{ alignItems: "flex-start" }}>
