@@ -101,6 +101,9 @@ export default function Landing() {
           ))}
         </div>
       </section>
+      <footer className="tiny muted" style={{ textAlign: "center", marginTop: "3rem" }}>
+        Driftbook by Salt &amp; Sovereignty · <Link href="/privacy">Privacy</Link> · <Link href="/terms">Terms</Link>
+      </footer>
     </div>
   );
 }

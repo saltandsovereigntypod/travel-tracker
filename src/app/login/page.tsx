@@ -156,6 +156,9 @@ function LoginInner() {
           {mode !== "signin" && (
             <button className="btn btn-ghost btn-sm" onClick={() => setMode("signin")}>Already have an account? Sign in</button>
           )}
+          <p className="tiny muted" style={{ marginTop: "0.6rem" }}>
+            By continuing you agree to the <Link href="/terms">Terms</Link> and <Link href="/privacy">Privacy policy</Link>.
+          </p>
         </div>
       </div>
     </div>
