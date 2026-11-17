@@ -1,0 +1,169 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import {
+  Home, Sun, Lightbulb, CalendarDays, Plane, BedDouble, Wallet, Luggage, Map, NotebookPen,
+  Camera, Users, BookHeart, Settings2, MoreHorizontal, Loader2, WifiOff,
+} from "lucide-react";
+import clsx from "clsx";
+import { TopBar } from "./AppChrome";
+import { useTrip } from "./TripProvider";
+import { Avatar } from "./ui/Fields";
+import { Modal } from "./ui/Modal";
+import { fontHref, readableOn, themeVars } from "@/lib/themes";
+
+export const NAV = [
+  { slug: "", label: "My view", icon: Home },
+  { slug: "today", label: "Today", icon: Sun },
+  { slug: "ideas", label: "Ideas", icon: Lightbulb },
+  { slug: "itinerary", label: "Itinerary", icon: CalendarDays },
+  { slug: "flights", label: "Flights", icon: Plane },
+  { slug: "stays", label: "Stays", icon: BedDouble },
+  { slug: "budget", label: "Budget", icon: Wallet },
+  { slug: "packing", label: "Packing", icon: Luggage },
+  { slug: "map", label: "Map", icon: Map },
+  { slug: "notes", label: "Notes & journal", icon: NotebookPen },
+  { slug: "photos", label: "Photos", icon: Camera },
+  { slug: "scrapbook", label: "Scrapbook", icon: BookHeart },
+  { slug: "people", label: "People & sharing", icon: Users },
+  { slug: "settings", label: "Trip settings", icon: Settings2 },
+];
+
+const MOBILE_MAIN = ["", "ideas", "itinerary", "budget"];
+
+export function TripShell({ children }: { children: React.ReactNode }) {
+  const { trip, loading, error, offline, view, online, me, tripId, setPresencePage, nameOf, colorOf } = useTrip();
+  const pathname = usePathname();
+  const base = `/trips/${tripId}`;
+  const current = pathname.replace(base, "").replace(/^\//, "").split("/")[0];
+  const [moreOpen, setMoreOpen] = useState(false);
+  const theme = view.theme as Required<typeof view.theme>;
+
+  useEffect(() => {
+    setPresencePage(current || "home");
+  }, [current, setPresencePage]);
+
+  // Load only the fonts this person's theme uses.
+  const href = fontHref([theme.headingFont, theme.bodyFont]);
+  useEffect(() => {
+    if (!href) return;
+    const id = "theme-fonts";
+    let link = document.getElementById(id) as HTMLLinkElement | null;
+    if (!link) {
+      link = document.createElement("link");
+      link.id = id;
+      link.rel = "stylesheet";
+      document.head.appendChild(link);
+    }
+    link.href = href;
+  }, [href]);
+
+  const style = useMemo(() => ({ ...themeVars(theme as never), "--on-accent": readableOn(theme.accent) }) as React.CSSProperties, [theme]);
+
+  const others = online.filter((p) => p.user_id !== me);
+
+  if (loading) {
+    return (
+      <div className="auth-wrap">
+        <Loader2 className="spin" />
+      </div>
+    );
+  }
+  if (error || !trip) {
+    return (
+      <>
+        <TopBar />
+        <div className="auth-wrap" style={{ minHeight: "60dvh" }}>
+          <div className="card auth-card" style={{ textAlign: "center", padding: "2rem" }}>
+            <h2>Can&apos;t open this trip</h2>
+            <p className="muted" style={{ margin: "0.6rem 0 1rem" }}>{error}</p>
+            <Link className="btn btn-primary" href="/trips">Back to my trips</Link>
+          </div>
+        </div>
+      </>
+    );
+  }
+
+  return (
+    <div id="theme-root" style={style} data-card={theme.cardStyle}>
+      <TopBar>
+        <Link href={base} className="truncate heading" style={{ fontSize: "1.05rem", textDecoration: "none", fontWeight: 700 }}>
+          {trip.name}
+        </Link>
+        <div className="grow" />
+        {others.length > 0 && (
+          <div className="presence-bar" title="Here right now">
+            <span className="tiny muted hide-sm">Here now</span>
+            <div className="avatar-stack">
+              {others.slice(0, 5).map((p) => (
+                <Avatar
+                  key={p.user_id}
+                  name={nameOf(p.user_id)}
+                  color={colorOf(p.user_id)}
+                  size={28}
+                  ring
+                  title={`${nameOf(p.user_id)} is on ${NAV.find((n) => n.slug === (p.page === "home" ? "" : p.page))?.label ?? "the trip"}`}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+      </TopBar>
+      {offline && (
+        <div className="offline-banner">
+          <WifiOff size={14} style={{ display: "inline", verticalAlign: "-2px" }} /> You&apos;re offline. Showing the last saved copy; changes are paused.
+        </div>
+      )}
+      <div className="trip-layout">
+        <nav className="sidenav" aria-label="Trip sections">
+          {NAV.map((n, i) => {
+            const here = others.filter((p) => (p.page === "home" ? "" : p.page) === n.slug);
+            return (
+              <div key={n.slug}>
+                {i === 1 && <div className="nav-label">Plan</div>}
+                {i === 9 && <div className="nav-label">Remember</div>}
+                {i === 12 && <div className="nav-label">Trip</div>}
+                <Link href={n.slug ? `${base}/${n.slug}` : base} className={clsx(current === n.slug && "active")}>
+                  <n.icon size={18} />
+                  {n.label}
+                  {here.length > 0 && (
+                    <span className="presence-dot">
+                      {here.slice(0, 3).map((p) => (
+                        <span key={p.user_id} title={nameOf(p.user_id)} style={{ width: 8, height: 8, borderRadius: 9, background: colorOf(p.user_id), marginLeft: 2 }} />
+                      ))}
+                    </span>
+                  )}
+                </Link>
+              </div>
+            );
+          })}
+        </nav>
+        <main className="main">{children}</main>
+      </div>
+      <nav className="bottomnav" aria-label="Trip sections">
+        {NAV.filter((n) => MOBILE_MAIN.includes(n.slug)).map((n) => (
+          <Link key={n.slug} href={n.slug ? `${base}/${n.slug}` : base} className={clsx(current === n.slug && "active")}>
+            <n.icon size={20} />
+            {n.slug === "" ? "Home" : n.label}
+          </Link>
+        ))}
+        <button onClick={() => setMoreOpen(true)} className={clsx(!MOBILE_MAIN.includes(current) && "active")}>
+          <MoreHorizontal size={20} />
+          More
+        </button>
+      </nav>
+      <Modal open={moreOpen} onClose={() => setMoreOpen(false)} title="Go to">
+        <div className="more-sheet">
+          {NAV.filter((n) => !MOBILE_MAIN.includes(n.slug)).map((n) => (
+            <Link key={n.slug} href={`${base}/${n.slug}`} onClick={() => setMoreOpen(false)}>
+              <n.icon size={22} />
+              {n.label}
+            </Link>
+          ))}
+        </div>
+      </Modal>
+    </div>
+  );
+}

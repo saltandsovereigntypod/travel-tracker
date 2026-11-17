@@ -1,87 +1,87 @@
-# Wayfarer Workspace
+# Driftbook
 
-A visual life workspace where structured records and personal design remain separate. Travel planning is the first application, but the data model supports reusable workspaces, projects, records, templates, views, canvas designs, assets, and collaboration roles.
+Plan trips together. Design your own view.
 
-## Supabase setup
+Driftbook keeps the **information shared** and the **look personal**. Everyone on a trip sees the
+same ideas, itinerary, flights, stays and budget, and anyone with edit access can change them.
+Each person arranges and decorates their own view however they like (page or free-form board,
+themes, fonts, colors, stickers, photos), and nobody else's view changes.
 
-1. Open the Supabase project at `https://galveymskdfnxiqcloxf.supabase.co`.
-2. In **SQL Editor**, create a new query.
-3. Paste the complete contents of [`supabase/setup.sql`](supabase/setup.sql) and run it once.
-4. In **Authentication > URL Configuration**, set the Site URL to your GitHub Pages URL and add the same URL to Redirect URLs. During local development, also add `http://localhost:8000`.
-5. In **Authentication > Providers > Email**, choose whether email confirmation should be required. The UI supports either mode.
-6. Deploy the repository with GitHub Pages.
+## What's inside
 
-The browser uses the Supabase project URL and publishable key in `assets/js/services/supabase-client.js`. A publishable key is safe to expose in browser code when Row Level Security is enabled. Never add a `service_role` key to this repository.
+| Area | What it does |
+|---|---|
+| **My view** | Your personal home for the trip. *Page* mode (stacked blocks, like Notion) or *Board* mode (drag anything anywhere, like Milanote). Themes, fonts, colors, card styles, textures, stickers, your own images, templates. |
+| **Ideas** | Everyone adds things to do. Vote, comment, filter, then **Schedule** to move them onto the itinerary. |
+| **Itinerary** | Day-by-day plan with drag and drop between days. Flights and stay check-ins/outs appear on their dates automatically. |
+| **Flights** | Boarding-pass cards: times, confirmation codes (tap to copy), seats, who's on each flight. |
+| **Stays** | Hotels, hostels, rentals: nights, check-in times, directions, booking links, who's staying. |
+| **Budget** | Expenses in any currency (auto-converted), who paid, split between whom, and **settle up** suggestions. |
+| **Packing** | A shared group list (with "who's bringing it") and a private list for each person. |
+| **Map** | Every plan, idea and stay with a location, with each day's route. |
+| **Notes & journal** | Shared notes, private notes, and a daily trip journal. |
+| **Photos** | Shared photo album with captions, favorites and comments. |
+| **Scrapbook** | Turns journal entries, plans and favorite photos into a printable keepsake. |
+| **People & sharing** | Invite links (edit or view-only), going/maybe status, personal colors, and a read-only public link for family. |
+| **Today** | Countdown before the trip, today's plan during it. |
 
-## What the SQL creates
+It works on phones (installable, with an offline copy of the last-synced trip) and updates live
+when someone else makes a change, showing who's online and on which page.
 
-- Profiles connected to Supabase Auth
-- Workspaces and owner/editor/viewer membership
-- Generic projects and flexible JSON-backed records
-- Personal or workspace-visible views
-- Owner-scoped Fabric.js canvas designs
-- Reusable templates
-- Private asset metadata and a private `workspace-assets` Storage bucket
-- Project invitations
-- Row Level Security policies for every exposed table
-- A first-login seed function that creates a starter workspace and Japan 2027 project
+## How it's built
 
-## Local development
+- **Next.js 16 + TypeScript**, rendered mostly in the browser
+- **Supabase** for sign-in (email/password and Google), the Postgres database, photo storage and live updates
+- **Row Level Security** on every table: you only ever see trips you're a member of; viewers can't edit;
+  private notes, personal packing lists and personal designs are visible only to their owner
+- **Cloudflare Workers** hosting via [OpenNext](https://opennext.js.org/cloudflare)
+- Free, key-less services: OpenStreetMap place search (Photon), OpenFreeMap map tiles, Frankfurter exchange rates
+
+```
+src/
+  app/                 pages (routes)
+  components/
+    TripProvider.tsx   loads a trip, keeps it live, create/update/delete helpers
+    sections/          Ideas, Itinerary, Flights, Stays, Budget, Packing, Notes, Photos, Map, ...
+    view/              personal page/board canvases and the Design panel
+  lib/                 types, themes, blocks, dates/money helpers, cost splitting
+supabase/migrations/   database schema and access rules
+tests/                 unit tests (cost splitting, dates, layouts, themes)
+```
+
+## Run it locally
 
 ```bash
-python3 -m http.server 8000
+npm install
+npm run dev
 ```
 
-Open `http://localhost:8000`. ES modules and Supabase Auth will not work correctly when opening the HTML files directly from Finder.
-
-## Architecture
-
-```text
-Users
-  -> Workspaces
-    -> Workspace members
-    -> Projects
-      -> Records (shared information)
-      -> Views (personal or shared presentation)
-        -> Canvas designs (Fabric.js JSON)
-    -> Templates
-    -> Assets
-```
-
-The database owns information. Canvas scenes own presentation. Changing a hotel address updates the shared record. Moving that hotel card or changing its typography updates only the selected view's design.
-
-## Current implemented cloud features
-
-- Email/password sign-up and sign-in
-- Session persistence
-- Automatic starter workspace creation
-- Cloud loading for workspaces, projects, records, views, designs, templates, and assets
-- Fabric canvas design saving
-- PNG, JPG, and WebP uploads to private Supabase Storage
-- Signed asset URLs
-- Sign out
-
-Project and record creation forms, invitation acceptance, realtime collaboration, and conflict resolution are the next application layer. The schema and policies are already structured for those features.
-
-## Tests
+Open http://localhost:3000. The app talks to the Supabase project configured in
+`src/lib/supabase.ts` (override with `NEXT_PUBLIC_SUPABASE_URL` and
+`NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`). The publishable key is safe in the browser; never put a
+`service_role` key in this repo.
 
 ```bash
-npm test
+npm test          # unit tests
+npm run lint
+npm run typecheck
+npm run preview   # build and run the Cloudflare Worker locally
 ```
 
-## Complete product migration
+## Database
 
-This build includes the finished CRUD and collaboration foundation for projects, trip records, lifecycle states, budgets, packing lists, notes, memories, assets, personal canvas views, settings, invitations, and Supabase persistence.
+The schema lives in `supabase/migrations/` and is applied in order. To set up a fresh Supabase
+project, run each file in the SQL editor, oldest first.
 
-For an existing Supabase database that already ran `supabase/setup.sql`, run only:
+## Deploy to Cloudflare
 
-```text
-supabase/002_complete_product.sql
-```
+Easiest: in the Cloudflare dashboard, **Workers & Pages → Create → Import a repository**, pick this
+repo, and use:
 
-For a brand-new Supabase project, run these in order:
+- Build command: `npx opennextjs-cloudflare build`
+- Deploy command: `npx opennextjs-cloudflare deploy`
 
-1. `supabase/setup.sql`
-2. `supabase/002_complete_product.sql`
+Or from a terminal with Wrangler logged in: `npm run deploy`.
 
-Deploy every file in this repository to the root of the GitHub repository. Do not place the extracted outer folder inside the repository. `index.html`, `dashboard.html`, `trip.html`, and the `assets` directory must sit at repository root.
+After the first deploy, add the site's URL in Supabase under **Authentication → URL Configuration**
+(Site URL and Redirect URLs) so sign-in emails and Google sign-in come back to the right place.
