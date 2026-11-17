@@ -4,7 +4,7 @@ import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Loader2 } from "lucide-react";
-import { friendlyError, supabase } from "@/lib/supabase";
+import { SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL, friendlyError, supabase } from "@/lib/supabase";
 import { useAuth } from "@/components/AuthProvider";
 import { Field } from "@/components/ui/Fields";
 
@@ -27,6 +27,16 @@ function LoginInner() {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [googleOn, setGoogleOn] = useState(false);
+
+  // Only offer Google once it's switched on in Supabase; otherwise the button
+  // leads to a raw "provider is not enabled" error page.
+  useEffect(() => {
+    fetch(`${SUPABASE_URL}/auth/v1/settings`, { headers: { apikey: SUPABASE_PUBLISHABLE_KEY } })
+      .then((r) => r.json())
+      .then((d: { external?: Record<string, boolean> }) => setGoogleOn(!!d.external?.google))
+      .catch(() => setGoogleOn(false));
+  }, []);
 
   useEffect(() => {
     if (ready && user) router.replace(next);
@@ -91,7 +101,7 @@ function LoginInner() {
           {mode === "signup" ? "Plan together, design your own way." : mode === "forgot" ? "We'll email you a link." : "Sign in to your trips."}
         </p>
 
-        {mode !== "forgot" && (
+        {mode !== "forgot" && googleOn && (
           <>
             <button type="button" className="btn btn-block oauth-btn" onClick={google}>
               <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden>
