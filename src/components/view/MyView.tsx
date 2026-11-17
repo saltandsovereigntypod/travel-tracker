@@ -15,8 +15,23 @@ import type { BlockProps, BlockType, BoardBlock, PageBlock, TripView } from "@/l
  * The trip home page: each person's own arrangement of the shared trip.
  * Page mode = stacked blocks (Notion-like). Board mode = free placement (Milanote-like).
  */
+// Blocks that belong to a module; they hide when the space switches that module off.
+const BLOCK_MODULE: Partial<Record<BlockType, string>> = {
+  today: "today", ideas: "ideas", itinerary: "itinerary", flights: "flights", stays: "stays",
+  budget: "budget", packing: "packing", notes: "notes", photos: "photos", map: "map",
+};
+
 export function MyView() {
-  const { view, saveView } = useTrip();
+  const { view: rawView, saveView, hasModule } = useTrip();
+  const shows = (t: BlockType) => !BLOCK_MODULE[t] || hasModule(BLOCK_MODULE[t]!);
+  // Hidden blocks are kept (so switching a module back on restores them) but not shown.
+  const hiddenPage = rawView.page_layout.filter((b) => !shows(b.type));
+  const hiddenBoard = rawView.board_layout.filter((b) => !shows(b.type));
+  const view = {
+    ...rawView,
+    page_layout: rawView.page_layout.filter((b) => shows(b.type)),
+    board_layout: rawView.board_layout.filter((b) => shows(b.type)),
+  };
   const [editing, setEditing] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const mode = view.mode;
@@ -25,10 +40,10 @@ export function MyView() {
     (mode === "page" ? view.page_layout : view.board_layout).find((b) => b.id === selectedId) ?? null;
 
   function setPage(page_layout: PageBlock[]) {
-    saveView({ page_layout });
+    saveView({ page_layout: [...page_layout, ...hiddenPage] });
   }
   function setBoard(board_layout: BoardBlock[]) {
-    saveView({ board_layout });
+    saveView({ board_layout: [...board_layout, ...hiddenBoard] });
   }
 
   function addBlock(type: BlockType, props?: BlockProps) {

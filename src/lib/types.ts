@@ -56,6 +56,11 @@ export interface Trip {
   lat: number | null;
   lng: number | null;
   share_token: string | null;
+  /** Space kind (trip, wedding, podcast…). See lib/spaces.ts. */
+  kind: string;
+  icon: string;
+  /** Enabled modules in nav order; empty = template defaults. */
+  modules: { id: string; label?: string }[];
   created_by: string | null;
   created_at: string;
   updated_at: string;

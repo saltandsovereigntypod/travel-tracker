@@ -662,3 +662,26 @@ input[type="checkbox"] { accent-color: var(--accent); width: 18px; height: 18px;
   .color-dot-btn { width: 30px !important; height: 30px !important; border-radius: 15px !important; }
   .maplibregl-ctrl-group button { width: 38px !important; height: 38px !important; }
 }
+
+/* Spaces & templates */
+.space-icon { position: absolute; right: 0.9rem; bottom: -1.1rem; width: 52px; height: 52px; border-radius: 16px; background: var(--surface); display: grid; place-items: center; font-size: 1.7rem; box-shadow: var(--shadow); }
+.trip-card .trip-card-body { padding-top: 1.3rem; }
+.template-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 0.8rem; }
+.template-card { display: flex; flex-direction: column; gap: 0.35rem; text-align: left; padding: 0; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); color: var(--ink); cursor: pointer; overflow: hidden; font-family: var(--font-body); transition: transform 0.15s, box-shadow 0.15s; }
+.template-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); border-color: var(--accent); }
+.template-card > strong, .template-card > span:not(.template-art) { padding: 0 0.9rem; }
+.template-card > span:last-child { padding-bottom: 0.9rem; }
+.template-art { height: 84px; display: grid; place-items: center; font-size: 2.4rem; }
+.module-row { display: flex; align-items: center; gap: 0.6rem; padding: 0.5rem 0.4rem; border-radius: 10px; }
+.module-row.off { opacity: 0.55; }
+.module-row .input { min-height: 36px; }
+@media (max-width: 720px) {
+  .template-grid { grid-template-columns: 1fr 1fr; gap: 0.6rem; }
+  .template-art { height: 64px; font-size: 2rem; }
+  .template-card .small { font-size: 0.75rem; }
+}
+@media (max-width: 720px) {
+  .card.trip-card { padding: 0; }
+  .trip-cover { height: 112px; }
+  .space-icon { width: 44px; height: 44px; font-size: 1.4rem; bottom: -0.9rem; }
+}

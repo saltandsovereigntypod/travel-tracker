@@ -55,6 +55,7 @@ export function formatRange(start: string | null, end: string | null): string {
   if (!start && !end) return "Dates not set";
   if (start && !end) return `From ${formatDay(start, { weekday: undefined, year: "numeric" })}`;
   if (!start && end) return `Until ${formatDay(end, { weekday: undefined, year: "numeric" })}`;
+  if (start === end) return formatDay(start, { weekday: "short", year: "numeric" });
   const s = parseDay(start!);
   const e = parseDay(end!);
   const sameYear = s.getUTCFullYear() === e.getUTCFullYear();

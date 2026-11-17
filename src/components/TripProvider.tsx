@@ -15,6 +15,7 @@ import type {
 } from "@/lib/types";
 import { resolveTheme } from "@/lib/themes";
 import { defaultPageLayout, pageToBoard } from "@/lib/blocks";
+import { resolveModules, templateFor, type ResolvedModule, type SpaceTemplate } from "@/lib/spaces";
 
 export type TableName =
   | "ideas" | "idea_votes" | "itinerary_items" | "flights" | "stays" | "expenses"
@@ -112,6 +113,13 @@ interface TripContextValue {
   /** Everyone marked as going (the default for "who's doing this"). */
   goingIds: string[];
   reloadHouseholds: () => Promise<void>;
+  /** Modules switched on for this space, in nav order. */
+  modules: ResolvedModule[];
+  hasModule: (id: string) => boolean;
+  moduleName: (id: string, fallback?: string) => string;
+  template: SpaceTemplate;
+  /** "trip", "wedding", "show"… */
+  noun: string;
 }
 
 const TripContext = createContext<TripContextValue | null>(null);
@@ -509,6 +517,14 @@ export function TripProvider({ tripId, children }: { tripId: string; children: R
   );
   const reloadHouseholds = useCallback(() => loadHouseholds(rows.trip_members.map((m) => m.user_id)), [loadHouseholds, rows.trip_members]);
 
+  const modules = useMemo(() => resolveModules(trip), [trip]);
+  const template = useMemo(() => templateFor(trip?.kind), [trip?.kind]);
+  const hasModule = useCallback((id: string) => modules.some((m) => m.id === id), [modules]);
+  const moduleName = useCallback(
+    (id: string, fallback?: string) => modules.find((m) => m.id === id)?.name ?? fallback ?? id,
+    [modules],
+  );
+
   const resolvedView = useMemo(() => {
     const base = defaultView(tripId, me);
     if (!view) return base;
@@ -529,6 +545,7 @@ export function TripProvider({ tripId, children }: { tripId: string; children: R
     view: resolvedView, setPresencePage, nameOf, colorOf, insert, update, remove, updateTrip,
     saveView, vote, photoUrl, ensurePhotoUrls, reload: load,
     households, householdMembers, householdOf, partyOf, partyName, goingIds, reloadHouseholds,
+    modules, hasModule, moduleName, template, noun: template.noun,
   };
 
   return <TripContext.Provider value={value}>{children}</TripContext.Provider>;

@@ -14,8 +14,8 @@ const FEATURES = [
   { icon: Map, title: "Map", text: "Every idea, plan and stay pinned, with each day's route." },
   { icon: Palette, title: "Your own design", text: "Pages or a free-form board. Themes, fonts, colors, stickers. Nobody else's view changes." },
   { icon: Users, title: "Live together", text: "See changes the moment someone makes them, and who's looking at what." },
-  { icon: BookHeart, title: "Journal & scrapbook", text: "After the trip, your plans and photos become a keepsake." },
-  { icon: WifiOff, title: "Works offline", text: "Install it on your phone. Your last-synced trip opens in the airport." },
+  { icon: BookHeart, title: "Journal & scrapbook", text: "Afterwards, your plans, journal and photos become a keepsake." },
+  { icon: WifiOff, title: "Works offline", text: "Install it on your phone. Your last-synced plans open with no signal." },
   { icon: Share2, title: "Share a read-only link", text: "Send the itinerary to family without making them sign up." },
 ];
 
@@ -32,7 +32,7 @@ export default function Landing() {
         </Link>
         <div className="row">
           {signedIn ? (
-            <Link href="/trips" className="btn btn-primary">My trips</Link>
+            <Link href="/trips" className="btn btn-primary">Open Driftbook</Link>
           ) : (
             <>
               <Link href="/login" className="btn btn-ghost">Sign in</Link>
@@ -46,16 +46,16 @@ export default function Landing() {
         <div>
           <p className="chip">Plan together · design your own way</p>
           <h1 style={{ marginTop: "1rem" }}>
-            One trip.<br />
+            One plan.<br />
             <em>Everyone&apos;s</em> own scrapbook.
           </h1>
           <p className="hero-lead">
-            Driftbook keeps the plans shared and the look personal. Your friends see the same flights, stays and ideas,
-            and each of you arranges and decorates them however you like.
+            Trips, weddings, podcast seasons, your household: Driftbook drifts with your needs. Everyone shares the same
+            plans, money and calendar, everything feeds everything else, and each of you arranges and decorates it your own way.
           </p>
           <div className="row wrap">
             <Link href={signedIn ? "/trips" : "/login?mode=signup"} className="btn btn-primary btn-lg">
-              {signedIn ? "Open my trips" : "Create your first trip"}
+              {signedIn ? "Open Driftbook" : "Start planning"}
             </Link>
             <a href="#features" className="btn btn-lg">See what&apos;s inside</a>
           </div>
@@ -88,7 +88,7 @@ export default function Landing() {
       </section>
 
       <section id="features" style={{ paddingTop: "2rem" }}>
-        <h2 style={{ fontSize: "2rem", marginBottom: "1.2rem" }}>Everything a group trip needs</h2>
+        <h2 style={{ fontSize: "2rem", marginBottom: "1.2rem" }}>Everything a group plan needs</h2>
         <div className="feature-grid">
           {FEATURES.map((f) => (
             <div key={f.title} className="card">

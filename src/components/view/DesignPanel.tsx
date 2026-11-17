@@ -259,8 +259,14 @@ function useAssetUpload() {
   };
 }
 
+const BLOCK_MODULE: Partial<Record<BlockType, string>> = {
+  today: "today", ideas: "ideas", itinerary: "itinerary", flights: "flights", stays: "stays",
+  budget: "budget", packing: "packing", notes: "notes", photos: "photos", map: "map",
+};
+
 function AddTab({ onAdd }: { onAdd: (type: BlockType, props?: BlockProps) => void }) {
   const upload = useAssetUpload();
+  const { hasModule, moduleName } = useTrip();
   const { user } = useAuth();
   const [busy, setBusy] = useState(false);
   const [mine, setMine] = useState<{ id: string; url: string }[]>([]);
@@ -281,11 +287,11 @@ function AddTab({ onAdd }: { onAdd: (type: BlockType, props?: BlockProps) => voi
     <>
       {(["Trip info", "Decorate"] as const).map((group) => (
         <section key={group}>
-          <h4>{group}</h4>
+          <h4>{group === "Trip info" ? "Shared info" : group}</h4>
           <div className="add-grid">
-            {BLOCKS.filter((b) => b.group === group && b.type !== "sticker").map((b) => (
+            {BLOCKS.filter((b) => b.group === group && b.type !== "sticker" && (!BLOCK_MODULE[b.type] || hasModule(BLOCK_MODULE[b.type]!))).map((b) => (
               <button key={b.type} onClick={() => onAdd(b.type)} title={b.description}>
-                <Plus size={14} /> {b.label}
+                <Plus size={14} /> {BLOCK_MODULE[b.type] ? moduleName(BLOCK_MODULE[b.type]!, b.label) : b.label}
               </button>
             ))}
           </div>

@@ -9,6 +9,7 @@ import {
 import { Plus, Plane, BedDouble, MapPin, ExternalLink, Trash2, CalendarDays, Clock, MessageCircle } from "lucide-react";
 import clsx from "clsx";
 import { useTrip } from "../TripProvider";
+import { ModuleTitle } from "../ModuleTitle";
 import { Modal } from "../ui/Modal";
 import { EmptyState, Field, PersonPicker, PlaceSearch, Segmented } from "../ui/Fields";
 import { CostEditor, costColumns, costValueFrom, type CostValue } from "../ui/CostEditor";
@@ -81,7 +82,8 @@ export function ItinerarySection({ compact = false }: { compact?: boolean }) {
 
   const days = tripDays(trip?.start_date ?? null, trip?.end_date ?? null);
   const outside = [...new Set(rows.itinerary_items.map((i) => i.day).filter((d): d is string => !!d && !days.includes(d)))].sort();
-  const allDays = [...days, ...outside];
+  // Trip-style spaces show every day in their range; any other dated plans slot in chronologically.
+  const allDays = [...days, ...outside].sort();
   const unscheduled = itemsForDay(rows.itinerary_items, null);
   const today = todayString();
 
@@ -141,7 +143,7 @@ export function ItinerarySection({ compact = false }: { compact?: boolean }) {
       {!compact && (
         <div className="section-head">
           <div>
-            <h1>Itinerary</h1>
+            <ModuleTitle id="itinerary" fallback="Itinerary" />
             <p>
               <span className="hide-phone">Drag plans between days. </span>
               <span className="show-phone">Tap a plan to edit it or change its day. </span>
@@ -172,8 +174,8 @@ export function ItinerarySection({ compact = false }: { compact?: boolean }) {
       {!days.length && !compact && (
         <div className="card" style={{ marginBottom: "1rem" }}>
           <p>
-            <strong>Set your trip dates</strong> to get a day-by-day plan.{" "}
-            <Link href={`/trips/${tripId}/settings`} style={{ color: "var(--accent)" }}>Trip settings →</Link>
+            <strong>Add dates</strong> to get a day-by-day plan, or just add plans with any date.{" "}
+            <Link href={`/trips/${tripId}/settings`} style={{ color: "var(--accent)" }}>Settings →</Link>
           </p>
         </div>
       )}
@@ -271,7 +273,7 @@ function DayColumn({
     <section id={day ? `day-${day}` : "day-unscheduled"} className={clsx("card day-col", compact && "card-tight")} style={isToday ? { outline: "2px solid var(--accent)" } : undefined}>
       <div className="day-head">
         <div>
-          <div className="day-num">{day ? (index >= 0 ? `Day ${index + 1}` : "Outside trip dates") : "Unscheduled"}{isToday && " · Today"}</div>
+          <div className="day-num">{day ? (index >= 0 ? `Day ${index + 1}` : parseMonth(day)) : "Unscheduled"}{isToday && " · Today"}</div>
           <h3>{day ? formatDay(day, { weekday: "long" }) : "Someday / not sure yet"}</h3>
         </div>
         {canEdit && !compact && (
@@ -362,9 +364,11 @@ function ItemModal({ target, onClose }: { target: ItineraryItem | { day: string 
   const existing = target && "id" in target ? target : null;
   const days = tripDays(trip?.start_date ?? null, trip?.end_date ?? null);
   const [form, setForm] = useState(blank);
+  const [pickDate, setPickDate] = useState(false);
   const [loadedFor, setLoadedFor] = useState<unknown>(null);
   if (target !== loadedFor) {
     setLoadedFor(target);
+    setPickDate(false);
     if (existing) {
       setForm({
         title: existing.title,
@@ -452,11 +456,20 @@ function ItemModal({ target, onClose }: { target: ItineraryItem | { day: string 
               <input className="input" value={form.title} onChange={(e) => set("title", e.target.value)} placeholder="Dinner at Turner's Seafood" required maxLength={200} />
             </Field>
             <Field label="Day">
-              <select className="input" value={form.day} onChange={(e) => set("day", e.target.value)}>
-                <option value="">Unscheduled</option>
-                {days.map((d, i) => <option key={d} value={d}>Day {i + 1} · {formatDay(d)}</option>)}
-                {form.day && !days.includes(form.day) && <option value={form.day}>{formatDay(form.day)}</option>}
-              </select>
+              {days.length && !pickDate ? (
+                <select
+                  className="input"
+                  value={form.day}
+                  onChange={(e) => (e.target.value === "__pick" ? setPickDate(true) : set("day", e.target.value))}
+                >
+                  <option value="">Unscheduled</option>
+                  {days.map((d, i) => <option key={d} value={d}>Day {i + 1} · {formatDay(d)}</option>)}
+                  {form.day && !days.includes(form.day) && <option value={form.day}>{formatDay(form.day)}</option>}
+                  <option value="__pick">Another date…</option>
+                </select>
+              ) : (
+                <input className="input" type="date" value={form.day} onChange={(e) => set("day", e.target.value)} />
+              )}
             </Field>
             <Field label="Category">
               <select className="input" value={form.category} onChange={(e) => set("category", e.target.value)}>
@@ -548,4 +561,9 @@ function TrayIdea({ idea, up, onTap }: { idea: Idea; up: number; onTap: () => vo
       {up > 0 && <span className="tiny muted row" style={{ gap: 2 }}><ThumbsUp size={11} />{up}</span>}
     </div>
   );
+}
+
+function parseMonth(day: string) {
+  const [y, m] = day.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, 1)).toLocaleDateString("en-US", { month: "long", year: "numeric", timeZone: "UTC" });
 }

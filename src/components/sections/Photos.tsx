@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Camera, Heart, Upload, Trash2, Loader2, Download } from "lucide-react";
 import clsx from "clsx";
 import { useTrip } from "../TripProvider";
+import { ModuleTitle } from "../ModuleTitle";
 import { Modal } from "../ui/Modal";
 import { EmptyState, Field } from "../ui/Fields";
 import { useToast } from "../ui/Toast";
@@ -80,7 +81,7 @@ export function PhotosSection({ compact = false, limit }: { compact?: boolean; l
       {!compact && (
         <div className="section-head">
           <div>
-            <h1>Photos</h1>
+            <ModuleTitle id="photos" fallback="Photos" />
             <p>Everyone&apos;s pictures in one place. Heart the best ones for the scrapbook.</p>
           </div>
           <div className="toolbar">

@@ -3,6 +3,7 @@
 import { useEffect, useMemo } from "react";
 import { Printer, BookHeart } from "lucide-react";
 import { useTrip } from "../TripProvider";
+import { ModuleTitle } from "../ModuleTitle";
 import { Avatar, EmptyState } from "../ui/Fields";
 import { categoryOf } from "@/lib/categories";
 import { formatDayLong, formatRange, tripDays } from "@/lib/format";
@@ -30,7 +31,7 @@ export function ScrapbookSection() {
   if (!contentDays.length && !favorites.length && !loose.length) {
     return (
       <div>
-        <div className="section-head"><div><h1>Scrapbook</h1><p>Your trip, turned into a keepsake.</p></div></div>
+        <div className="section-head"><div><ModuleTitle id="scrapbook" fallback="Scrapbook" /><p>Your trip, turned into a keepsake.</p></div></div>
         <div className="card">
           <EmptyState icon={<BookHeart />} title="The scrapbook fills itself in">
             Write journal entries, add photos (heart your favorites) and plan your days. They all land here, day by day, ready to print.

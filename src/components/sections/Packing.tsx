@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Plus, Trash2, Luggage, Lock, Users, Sparkles } from "lucide-react";
 import clsx from "clsx";
 import { useTrip } from "../TripProvider";
+import { ModuleTitle } from "../ModuleTitle";
 import { Avatar, EmptyState, Segmented } from "../ui/Fields";
 import { PACKING_SUGGESTIONS } from "@/lib/categories";
 import type { PackingItem } from "@/lib/types";
@@ -42,7 +43,7 @@ export function PackingSection({ compact = false }: { compact?: boolean }) {
       {!compact && (
         <div className="section-head">
           <div>
-            <h1>Packing</h1>
+            <ModuleTitle id="packing" fallback="Packing" />
             <p>The shared list is for group stuff (&quot;who&apos;s bringing the speaker?&quot;). Your list is private to you.</p>
           </div>
         </div>

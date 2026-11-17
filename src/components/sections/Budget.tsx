@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Plus, Trash2, Wallet, ArrowRight, Check, Pencil, Loader2, Users, HeartHandshake } from "lucide-react";
 import clsx from "clsx";
 import { useTrip } from "../TripProvider";
+import { ModuleTitle } from "../ModuleTitle";
 import { Modal } from "../ui/Modal";
 import { Avatar, EmptyState, Field, PersonPicker, Segmented } from "../ui/Fields";
 import { EXPENSE_CATEGORIES, expenseCategoryOf } from "@/lib/categories";
@@ -126,7 +127,7 @@ export function BudgetSection({ compact = false }: { compact?: boolean }) {
     <div>
       <div className="section-head">
         <div>
-          <h1>Budget</h1>
+          <ModuleTitle id="budget" fallback="Budget" />
           <p>Plans you schedule count as <strong>still to pay</strong>. Mark them paid (or pay a deposit) and they move to <strong>spent</strong>.</p>
         </div>
         {canEdit && <button className="btn btn-primary" onClick={() => openNew()}><Plus size={16} /> Add expense</button>}

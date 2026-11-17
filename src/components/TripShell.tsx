@@ -14,27 +14,47 @@ import { Avatar } from "./ui/Fields";
 import { Modal } from "./ui/Modal";
 import { fontHref, readableOn, themeVars } from "@/lib/themes";
 
-export const NAV = [
-  { slug: "", label: "My view", icon: Home },
-  { slug: "today", label: "Today", icon: Sun },
-  { slug: "ideas", label: "Ideas", icon: Lightbulb },
-  { slug: "itinerary", label: "Itinerary", icon: CalendarDays },
-  { slug: "flights", label: "Flights", icon: Plane },
-  { slug: "stays", label: "Stays", icon: BedDouble },
-  { slug: "budget", label: "Budget", icon: Wallet },
-  { slug: "packing", label: "Packing", icon: Luggage },
-  { slug: "map", label: "Map", icon: Map },
-  { slug: "notes", label: "Notes & journal", icon: NotebookPen },
-  { slug: "photos", label: "Photos", icon: Camera },
-  { slug: "scrapbook", label: "Scrapbook", icon: BookHeart },
-  { slug: "people", label: "People & sharing", icon: Users },
-  { slug: "settings", label: "Trip settings", icon: Settings2 },
-];
+export const MODULE_ICONS: Record<string, typeof Home> = {
+  today: Sun,
+  ideas: Lightbulb,
+  itinerary: CalendarDays,
+  flights: Plane,
+  stays: BedDouble,
+  budget: Wallet,
+  packing: Luggage,
+  map: Map,
+  notes: NotebookPen,
+  photos: Camera,
+  scrapbook: BookHeart,
+};
 
-const MOBILE_MAIN = ["", "ideas", "itinerary", "budget"];
+interface NavItem {
+  slug: string;
+  label: string;
+  icon: typeof Home;
+}
+
+/** Navigation for a space: My view, its switched-on modules, then people and settings. */
+export function useSpaceNav(): NavItem[] {
+  const { modules, template } = useTrip();
+  const noun = template.noun.charAt(0).toUpperCase() + template.noun.slice(1);
+  return useMemo(
+    () => [
+      { slug: "", label: "My view", icon: Home },
+      ...modules.map((m) => ({ slug: m.slug, label: m.name, icon: MODULE_ICONS[m.id] ?? Sun })),
+      { slug: "people", label: "People & sharing", icon: Users },
+      { slug: "settings", label: `${noun} settings`, icon: Settings2 },
+    ],
+    [modules, noun],
+  );
+}
+
 
 export function TripShell({ children }: { children: React.ReactNode }) {
-  const { trip, loading, error, offline, view, online, me, tripId, setPresencePage, nameOf, colorOf } = useTrip();
+  const { trip, loading, error, offline, view, online, me, tripId, setPresencePage, nameOf, colorOf, noun } = useTrip();
+  const NAV = useSpaceNav();
+  // Phone bottom bar: home plus the first three modules (skipping Today, which lives on Home).
+  const MOBILE_MAIN = ["", ...NAV.filter((n) => n.slug && n.slug !== "today" && n.slug !== "people" && n.slug !== "settings").slice(0, 3).map((n) => n.slug)];
   const pathname = usePathname();
   const base = `/trips/${tripId}`;
   const current = pathname.replace(base, "").replace(/^\//, "").split("/")[0];
@@ -77,7 +97,7 @@ export function TripShell({ children }: { children: React.ReactNode }) {
         <TopBar />
         <div className="auth-wrap" style={{ minHeight: "60dvh" }}>
           <div className="card auth-card" style={{ textAlign: "center", padding: "2rem" }}>
-            <h2>Can&apos;t open this trip</h2>
+            <h2>Can&apos;t open this {noun}</h2>
             <p className="muted" style={{ margin: "0.6rem 0 1rem" }}>{error}</p>
             <Link className="btn btn-primary" href="/trips">Back to my trips</Link>
           </div>
@@ -104,7 +124,7 @@ export function TripShell({ children }: { children: React.ReactNode }) {
                   color={colorOf(p.user_id)}
                   size={28}
                   ring
-                  title={`${nameOf(p.user_id)} is on ${NAV.find((n) => n.slug === (p.page === "home" ? "" : p.page))?.label ?? "the trip"}`}
+                  title={`${nameOf(p.user_id)} is on ${NAV.find((n) => n.slug === (p.page === "home" ? "" : p.page))?.label ?? `the ${noun}`}`}
                 />
               ))}
             </div>
@@ -122,9 +142,7 @@ export function TripShell({ children }: { children: React.ReactNode }) {
             const here = others.filter((p) => (p.page === "home" ? "" : p.page) === n.slug);
             return (
               <div key={n.slug}>
-                {i === 1 && <div className="nav-label">Plan</div>}
-                {i === 9 && <div className="nav-label">Remember</div>}
-                {i === 12 && <div className="nav-label">Trip</div>}
+                {i === NAV.length - 2 && <div className="nav-label">{noun}</div>}
                 <Link href={n.slug ? `${base}/${n.slug}` : base} className={clsx(current === n.slug && "active")}>
                   <n.icon size={18} />
                   {n.label}

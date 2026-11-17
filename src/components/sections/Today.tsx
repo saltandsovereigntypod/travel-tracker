@@ -10,12 +10,13 @@ import { itemsForDay, useFixedEvents } from "./Itinerary";
 import { useIdeaScores } from "./Ideas";
 
 export function Countdown({ big = false }: { big?: boolean }) {
-  const { trip } = useTrip();
+  const { trip, noun } = useTrip();
   const c = countdown(trip?.start_date ?? null, trip?.end_date ?? null);
+  const single = !!trip?.start_date && trip.start_date === trip.end_date;
   const text =
-    c.phase === "before" ? { n: c.days, label: `day${c.days === 1 ? "" : "s"} to go` } :
-    c.phase === "during" ? { n: c.days, label: `of ${c.total} · you're there!` } :
-    c.phase === "after" ? { n: "♥", label: "what a trip" } : { n: "?", label: "set your dates" };
+    c.phase === "before" ? { n: c.days, label: `day${c.days === 1 ? "" : "s"} until the ${noun}` } :
+    c.phase === "during" ? (single ? { n: "🎉", label: "today's the day!" } : { n: c.days, label: `of ${c.total} · it's happening!` }) :
+    c.phase === "after" ? { n: "♥", label: `what a ${noun}` } : { n: "✦", label: "add a date to count down" };
   return (
     <div style={{ textAlign: "center" }}>
       <div className="countdown-num" style={big ? { fontSize: "5rem" } : undefined}>{text.n}</div>
@@ -26,7 +27,7 @@ export function Countdown({ big = false }: { big?: boolean }) {
 
 /** What's happening today during the trip, or what's coming up before it. */
 export function TodaySection({ compact = false }: { compact?: boolean }) {
-  const { trip, rows, tripId } = useTrip();
+  const { trip, rows, tripId, noun, hasModule } = useTrip();
   const fixed = useFixedEvents();
   const scores = useIdeaScores();
   const today = todayString();
@@ -39,7 +40,7 @@ export function TodaySection({ compact = false }: { compact?: boolean }) {
   const tomorrow = c.phase === "during" ? addDays(today, 1) : null;
   const tomorrowItems = tomorrow ? itemsForDay(rows.itinerary_items, tomorrow) : [];
 
-  const unbooked = [
+  const unbooked = !hasModule("flights") && !hasModule("stays") ? [] : [
     ...rows.stays.filter((s) => s.status === "idea").map((s) => `Book a stay: ${s.name}`),
     ...rows.flights.filter((f) => f.status === "idea").map((f) => `Book flight ${f.from_code || ""}→${f.to_code || ""}`),
   ];
@@ -54,7 +55,7 @@ export function TodaySection({ compact = false }: { compact?: boolean }) {
       {!compact && (
         <div className="section-head" style={{ marginBottom: 0 }}>
           <div>
-            <h1>{c.phase === "during" ? "Today" : c.phase === "after" ? "After the trip" : "Up next"}</h1>
+            <h1>{c.phase === "during" ? "Today" : c.phase === "after" ? `After the ${noun}` : "Up next"}</h1>
             <p>{c.phase === "during" ? formatDayLong(today) : "A quick look at what needs attention."}</p>
           </div>
         </div>
@@ -110,7 +111,7 @@ export function TodaySection({ compact = false }: { compact?: boolean }) {
           )}
           {unscheduled > 0 && <p className="small">{unscheduled} plan{unscheduled === 1 ? "" : "s"} waiting for a day.</p>}
           {!unbooked.length && !topIdeas.length && !unscheduled && <p className="small muted">All caught up. 🎉</p>}
-          <Link href={`/trips/${tripId}/itinerary`} className="btn btn-sm btn-ghost" style={{ alignSelf: "flex-start" }}>Open itinerary →</Link>
+          {hasModule("itinerary") && <Link href={`/trips/${tripId}/itinerary`} className="btn btn-sm btn-ghost" style={{ alignSelf: "flex-start" }}>Open calendar →</Link>}
         </div>
       )}
     </div>

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import "maplibre-gl/dist/maplibre-gl.css";
 import type { Map as MLMap, Marker } from "maplibre-gl";
 import { useTrip } from "../TripProvider";
+import { ModuleTitle } from "../ModuleTitle";
 import { Segmented } from "../ui/Fields";
 import { categoryOf, stayKindOf } from "@/lib/categories";
 import { formatDay, formatTime, tripDays } from "@/lib/format";
@@ -127,14 +128,14 @@ export function MapSection({ compact = false, height }: { compact?: boolean; hei
       {!compact && (
         <div className="section-head" style={{ marginBottom: 0 }}>
           <div>
-            <h1>Map</h1>
+            <ModuleTitle id="map" fallback="Map" />
             <p>Plans, ideas and stays with a location. Pick a day to see its route.</p>
           </div>
         </div>
       )}
       <div className="toolbar">
         <select className="input" style={{ width: "auto" }} value={day} onChange={(e) => setDay(e.target.value)} aria-label="Day">
-          <option value="all">Whole trip</option>
+          <option value="all">Everything</option>
           {days.map((d, i) => <option key={d} value={d}>Day {i + 1} · {formatDay(d)}</option>)}
         </select>
         {!compact && (

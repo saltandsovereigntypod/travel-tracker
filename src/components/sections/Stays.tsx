@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { BedDouble, Plus, Trash2, MapPin, Phone, ExternalLink, Copy, Moon } from "lucide-react";
 import { useTrip } from "../TripProvider";
+import { ModuleTitle } from "../ModuleTitle";
 import { Modal } from "../ui/Modal";
 import { Avatar, EmptyState, Field, PersonPicker, PlaceSearch, Segmented } from "../ui/Fields";
 import { useToast } from "../ui/Toast";
@@ -28,7 +29,7 @@ export function StaysSection({ compact = false }: { compact?: boolean }) {
       {!compact && (
         <div className="section-head">
           <div>
-            <h1>Stays</h1>
+            <ModuleTitle id="stays" fallback="Stays" />
             <p>Hotels, hostels, rentals and couches. {totalNights > 0 && `${totalNights} night${totalNights === 1 ? "" : "s"} booked.`}</p>
           </div>
           {canEdit && <button className="btn btn-primary" onClick={() => setEditing("new")}><Plus size={16} /> Add stay</button>}

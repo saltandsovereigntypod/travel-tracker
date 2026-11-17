@@ -23,6 +23,7 @@ describe("dates", () => {
   it("formats ranges", () => {
     expect(formatRange("2027-10-24", "2027-11-06")).toBe("Oct 24 – Nov 6, 2027");
     expect(formatRange(null, null)).toBe("Dates not set");
+    expect(formatRange("2027-06-12", "2027-06-12")).toBe("Sat, Jun 12, 2027");
   });
 });
 
