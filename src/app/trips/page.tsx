@@ -7,6 +7,7 @@ import { Plus, CalendarDays, MapPin, Loader2, ArrowLeft } from "lucide-react";
 import clsx from "clsx";
 import { RequireAuth, TopBar } from "@/components/AppChrome";
 import { InstallPrompt } from "@/components/InstallPrompt";
+import { HomeFeed } from "@/components/home/HomeFeed";
 import { useAuth } from "@/components/AuthProvider";
 import { Modal } from "@/components/ui/Modal";
 import { EmptyState, Field } from "@/components/ui/Fields";
@@ -94,6 +95,8 @@ function SpacesInner() {
           </div>
         ) : (
           <>
+            <HomeFeed spaces={spaces} />
+            <h2 style={{ margin: "0.4rem 0 0.9rem" }}>Your spaces</h2>
             {dated.length > 0 && <SpaceGrid spaces={dated} title={ongoing.length ? "Coming up" : undefined} />}
             {ongoing.length > 0 && <SpaceGrid spaces={ongoing} title={dated.length ? "Ongoing" : undefined} />}
             {past.length > 0 && <SpaceGrid spaces={past} title="Memories" />}

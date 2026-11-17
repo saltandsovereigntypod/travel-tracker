@@ -264,7 +264,25 @@ export interface TripView {
   theme: Partial<Theme>;
   page_layout: PageBlock[];
   board_layout: BoardBlock[];
+  /** Per-list view choices, private to this person. Keyed by list id. */
+  list_prefs?: Record<string, ListPrefs>;
   updated_at: string;
+}
+
+export type ListViewType = "table" | "cards" | "board" | "calendar" | "map" | "checklist";
+
+export interface ListPrefs {
+  view?: ListViewType;
+  /** Board: field to make columns from. */
+  groupBy?: string;
+  /** Calendar: which date field to use. */
+  dateField?: string;
+  /** Map: which place field. */
+  placeField?: string;
+  sort?: { field: string; dir: "asc" | "desc" };
+  /** Show only items assigned to me. */
+  mine?: boolean;
+  hideDone?: boolean;
 }
 
 export interface Template {

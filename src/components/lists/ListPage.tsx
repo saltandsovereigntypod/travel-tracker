@@ -1,18 +1,41 @@
 "use client";
 
-import { Suspense, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Plus, Settings2, Search, ListPlus } from "lucide-react";
+import { Plus, Settings2, Search, ListPlus, Table2, LayoutGrid, Columns3, CalendarDays, Map as MapIcon, CheckSquare } from "lucide-react";
 import { useTrip } from "../TripProvider";
-import { EmptyState } from "../ui/Fields";
-import { FieldValue } from "./FieldValue";
+import { EmptyState, Segmented } from "../ui/Fields";
 import { ListItemModal } from "./ItemModal";
 import { ListSettings } from "./ListSettings";
+import { BoardView, CalendarView, CardsView, ChecklistView, MapListView, TableView } from "./Views";
 import { useEngine } from "./engine";
-import { itemFeeds, itemMoneyTotal, listProgress, statusField, type FieldDef, type ListItem } from "@/lib/fields";
+import { itemMoneyTotal, listProgress, statusField, type ListItem } from "@/lib/fields";
+import { dateFields, defaultGroupField, filterItems, groupableFields, placeFields, sortItems } from "@/lib/views";
 import { formatMoney } from "@/lib/format";
+import type { ListPrefs, ListViewType } from "@/lib/types";
 
-/** A custom list: table on big screens, cards on phones. */
+const VIEWS: { value: ListViewType; label: string; icon: typeof Table2 }[] = [
+  { value: "table", label: "Table", icon: Table2 },
+  { value: "cards", label: "Cards", icon: LayoutGrid },
+  { value: "board", label: "Board", icon: Columns3 },
+  { value: "calendar", label: "Calendar", icon: CalendarDays },
+  { value: "map", label: "Map", icon: MapIcon },
+  { value: "checklist", label: "Checklist", icon: CheckSquare },
+];
+
+function useIsPhone() {
+  const [phone, setPhone] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 720px)");
+    const on = () => setPhone(mq.matches);
+    on();
+    mq.addEventListener("change", on);
+    return () => mq.removeEventListener("change", on);
+  }, []);
+  return phone;
+}
+
+/** A custom list, shown however each person prefers (their choice is private to them). */
 export function ListPage({ listId }: { listId: string }) {
   return (
     <Suspense>
@@ -22,37 +45,41 @@ export function ListPage({ listId }: { listId: string }) {
 }
 
 function ListPageInner({ listId }: { listId: string }) {
-  const { rows, canEdit, insert, trip, tripId, loading } = useTrip();
+  const { rows, canEdit, insert, update, trip, tripId, loading, view, saveView, me } = useTrip();
   const { money } = useEngine();
   const params = useSearchParams();
   const router = useRouter();
+  const phone = useIsPhone();
   const list = rows.lists.find((l) => l.id === listId);
   const [q, setQ] = useState("");
   const [quick, setQuick] = useState("");
   const [settings, setSettings] = useState(false);
   const openId = params.get("item");
-  const setOpen = (id: string | null) => router.replace(`/trips/${tripId}/lists/${listId}${id ? `?item=${id}` : ""}`, { scroll: false });
-
-  const items = useMemo(
-    () =>
-      rows.list_items
-        .filter((i) => i.list_id === listId)
-        .filter((i) => !q || i.title.toLowerCase().includes(q.toLowerCase()) || JSON.stringify(i.values).toLowerCase().includes(q.toLowerCase()))
-        .sort((a, b) => a.sort_order - b.sort_order),
-    [rows.list_items, listId, q],
+  const setOpen = useCallback(
+    (id: string | null) => router.replace(`/trips/${tripId}/lists/${listId}${id ? `?item=${id}` : ""}`, { scroll: false }),
+    [router, tripId, listId],
   );
+
+  const prefs: ListPrefs = view.list_prefs?.[listId] ?? {};
+  // Tables are cramped on phones, so default to cards there.
+  const viewType: ListViewType = prefs.view ?? (phone ? "cards" : "table");
+  const setPrefs = (p: Partial<ListPrefs>) => saveView({ list_prefs: { ...(view.list_prefs ?? {}), [listId]: { ...prefs, ...p } } });
+
+  const all = useMemo(() => rows.list_items.filter((i) => i.list_id === listId), [rows.list_items, listId]);
+  const items = useMemo(() => (list ? sortItems(filterItems(all, list, prefs, me, q), list, prefs.sort) : []), [all, list, prefs, me, q]);
 
   if (!list) {
     return loading ? null : <EmptyState title="This list doesn't exist anymore">It may have been deleted.</EmptyState>;
   }
 
-  const all = rows.list_items.filter((i) => i.list_id === listId);
   const progress = listProgress(list, all);
   const moneyTotal = all.reduce((n, i) => n + (itemMoneyTotal(i, list, money) ?? 0), 0);
   const titleLabel = (list.settings as { titleLabel?: string })?.titleLabel ?? "Name";
-  const columns = list.fields.filter((f) => f.type !== "longtext").slice(0, 6);
-  const sf = statusField(list);
-  const cardFields = list.fields.filter((f) => f !== sf && ["date", "datetime", "money", "person", "people", "place", "relation", "rollup", "select", "number", "checkbox", "rating"].includes(f.type)).slice(0, 4);
+  const groupField = list.fields.find((f) => f.id === prefs.groupBy) ?? defaultGroupField(list);
+  const dateField = list.fields.find((f) => f.id === prefs.dateField) ?? dateFields(list)[0];
+  const placeField = list.fields.find((f) => f.id === prefs.placeField) ?? placeFields(list)[0];
+  const hasPeople = list.fields.some((f) => f.type === "person" || f.type === "people");
+  const canCheck = !!statusField(list) || list.fields.some((f) => f.type === "checkbox");
 
   async function add(e: React.FormEvent) {
     e.preventDefault();
@@ -60,10 +87,28 @@ function ListPageInner({ listId }: { listId: string }) {
     if (!title) return;
     setQuick("");
     const last = all[all.length - 1];
-    await insert("list_items", { list_id: listId, title, values: {}, sort_order: (last?.sort_order ?? 0) + 1 });
+    const values: Record<string, unknown> = {};
+    // Adding from a board column or "only mine" view: pre-fill what's obvious.
+    if (prefs.mine) {
+      const pf = list!.fields.find((f) => f.type === "person" || f.type === "people");
+      if (pf) values[pf.id] = pf.type === "people" ? [me] : me;
+    }
+    await insert("list_items", { list_id: listId, title, values, sort_order: (last?.sort_order ?? 0) + 1 });
+  }
+
+  function toggleDone(item: ListItem, done: boolean) {
+    const sf = statusField(list!);
+    if (sf) {
+      const target = done ? sf.options?.find((o) => o.kind === "done") : sf.options?.find((o) => o.kind === "todo") ?? sf.options?.[0];
+      void update("list_items", item.id, { values: { ...item.values, [sf.id]: target?.id ?? null } });
+    } else {
+      const cb = list!.fields.find((f) => f.type === "checkbox")!;
+      void update("list_items", item.id, { values: { ...item.values, [cb.id]: done } });
+    }
   }
 
   const openItem = openId ? all.find((i) => i.id === openId) ?? null : null;
+  const views = VIEWS.filter((v) => v.value !== "map" || placeFields(list).length > 0).filter((v) => v.value !== "calendar" || dateFields(list).length > 0);
 
   return (
     <div>
@@ -77,14 +122,65 @@ function ListPageInner({ listId }: { listId: string }) {
           </p>
         </div>
         <div className="toolbar">
-          <div className="input-icon" style={{ minWidth: 180 }}>
+          <div className="input-icon" style={{ minWidth: 160, flex: "1 1 160px" }}>
             <Search size={15} />
             <input className="input" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search" aria-label={`Search ${list.name}`} />
           </div>
-          <button className="btn" onClick={() => setSettings(true)}><Settings2 size={15} /> <span className="hide-phone">Fields</span></button>
+          <button className="btn" onClick={() => setSettings(true)} aria-label="Fields and settings"><Settings2 size={15} /> <span className="hide-phone">Fields</span></button>
         </div>
       </div>
       {progress && progress.total > 0 && <div className="progress" style={{ marginBottom: "1rem" }}><span style={{ width: `${(progress.done / progress.total) * 100}%` }} /></div>}
+
+      <div className="view-bar">
+        <Segmented<ListViewType>
+          size="sm"
+          value={viewType}
+          onChange={(v) => setPrefs({ view: v })}
+          options={views.map((v) => ({ value: v.value, label: <><v.icon size={14} /> <span className={phone ? "sr-only" : undefined}>{v.label}</span></> }))}
+        />
+        {viewType === "board" && groupableFields(list).length > 1 && (
+          <select className="input" value={groupField?.id ?? ""} onChange={(e) => setPrefs({ groupBy: e.target.value })} aria-label="Group by">
+            {groupableFields(list).map((f) => <option key={f.id} value={f.id}>By {f.name.toLowerCase()}</option>)}
+          </select>
+        )}
+        {viewType === "calendar" && dateFields(list).length > 1 && (
+          <select className="input" value={dateField?.id ?? ""} onChange={(e) => setPrefs({ dateField: e.target.value })} aria-label="Date to use">
+            {dateFields(list).map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
+          </select>
+        )}
+        {viewType === "map" && placeFields(list).length > 1 && (
+          <select className="input" value={placeField?.id ?? ""} onChange={(e) => setPrefs({ placeField: e.target.value })} aria-label="Place to use">
+            {placeFields(list).map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
+          </select>
+        )}
+        {(viewType === "cards" || viewType === "checklist" || viewType === "board") && (
+          <select
+            className="input"
+            value={prefs.sort ? `${prefs.sort.field}:${prefs.sort.dir}` : ""}
+            onChange={(e) => {
+              const [field, dir] = e.target.value.split(":");
+              setPrefs({ sort: field ? { field, dir: dir as "asc" | "desc" } : undefined });
+            }}
+            aria-label="Sort"
+          >
+            <option value="">Manual order</option>
+            <option value="title:asc">{titleLabel} A→Z</option>
+            {list.fields.filter((f) => ["date", "datetime", "money", "number", "rating", "status"].includes(f.type)).map((f) => (
+              <option key={f.id} value={`${f.id}:${f.type === "money" || f.type === "rating" ? "desc" : "asc"}`}>{f.name}</option>
+            ))}
+          </select>
+        )}
+        {hasPeople && (
+          <label className="row small" style={{ gap: 6 }}>
+            <input type="checkbox" checked={!!prefs.mine} onChange={(e) => setPrefs({ mine: e.target.checked })} /> Only mine
+          </label>
+        )}
+        {canCheck && (
+          <label className="row small" style={{ gap: 6 }}>
+            <input type="checkbox" checked={!!prefs.hideDone} onChange={(e) => setPrefs({ hideDone: e.target.checked })} /> Hide done
+          </label>
+        )}
+      </div>
 
       {canEdit && (
         <form className="quick-add" style={{ marginBottom: "0.9rem" }} onSubmit={add}>
@@ -93,62 +189,38 @@ function ListPageInner({ listId }: { listId: string }) {
         </form>
       )}
 
-      {items.length === 0 ? (
+      {items.length === 0 && viewType !== "calendar" && viewType !== "map" ? (
         <div className="card">
-          <EmptyState icon={<ListPlus />} title={q ? "Nothing matches" : `No ${list.name.toLowerCase()} yet`}>
-            {q ? "Try a different search." : `Add your first ${titleLabel.toLowerCase()} above. Tap it to fill in the details.`}
+          <EmptyState icon={<ListPlus />} title={q || prefs.mine || prefs.hideDone ? "Nothing matches" : `No ${list.name.toLowerCase()} yet`}>
+            {q || prefs.mine || prefs.hideDone ? "Try clearing the search or filters." : `Add your first ${titleLabel.toLowerCase()} above. Tap it to fill in the details.`}
           </EmptyState>
         </div>
+      ) : viewType === "table" ? (
+        <TableView
+          list={list}
+          items={items}
+          onOpen={setOpen}
+          sortField={prefs.sort?.field}
+          sortDir={prefs.sort?.dir}
+          onSort={(field) => setPrefs({ sort: prefs.sort?.field === field ? (prefs.sort.dir === "asc" ? { field, dir: "desc" } : undefined) : { field, dir: "asc" } })}
+        />
+      ) : viewType === "cards" ? (
+        <CardsView list={list} items={items} onOpen={setOpen} />
+      ) : viewType === "board" ? (
+        <BoardView list={list} items={items} onOpen={setOpen} groupField={groupField} canEdit={canEdit} onMove={(id, value) => {
+          const it = all.find((x) => x.id === id);
+          if (it && groupField) void update("list_items", id, { values: { ...it.values, [groupField.id]: groupField.type === "people" ? (value ? [value] : []) : value } });
+        }} />
+      ) : viewType === "calendar" ? (
+        <CalendarView list={list} items={items} onOpen={setOpen} dateField={dateField} />
+      ) : viewType === "map" ? (
+        <MapListView list={list} items={items} onOpen={setOpen} placeField={placeField} />
       ) : (
-        <>
-          {/* Big screens: a table. */}
-          <div className="card hide-phone table-wrap" style={{ padding: 0 }}>
-            <table className="list-table">
-              <thead>
-                <tr>
-                  <th>{titleLabel}</th>
-                  {columns.map((f) => <th key={f.id}>{f.name}</th>)}
-                </tr>
-              </thead>
-              <tbody>
-                {items.map((i) => (
-                  <tr key={i.id} className="item-row" onClick={() => setOpen(i.id)} tabIndex={0} onKeyDown={(e) => e.key === "Enter" && setOpen(i.id)}>
-                    <td className="title-cell">{i.title || <span className="muted">Untitled</span>}</td>
-                    {columns.map((f) => <td key={f.id}><FieldValue field={f} item={i} list={list} compact /></td>)}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          {/* Phones: cards. */}
-          <div className="item-cards show-phone">
-            {items.map((i) => <ItemCard key={i.id} item={i} fields={cardFields} status={sf} onOpen={() => setOpen(i.id)} />)}
-          </div>
-        </>
+        <ChecklistView list={list} items={items} onOpen={setOpen} canEdit={canEdit} onToggle={toggleDone} />
       )}
 
       {openItem && <ListItemModal list={list} item={openItem} onClose={() => setOpen(null)} />}
       <ListSettings list={list} open={settings} onClose={() => setSettings(false)} />
     </div>
   );
-
-  function ItemCard({ item, fields, status, onOpen }: { item: ListItem; fields: FieldDef[]; status?: FieldDef; onOpen: () => void }) {
-    const feeds = itemFeeds(item, list!);
-    return (
-      <button className="card item-card" onClick={onOpen}>
-        <div className="row-between" style={{ alignItems: "flex-start" }}>
-          <strong>{item.title || "Untitled"}</strong>
-          {status && <FieldValue field={status} item={item} list={list!} compact />}
-        </div>
-        <div className="meta">
-          {fields.map((f) => (
-            <span key={f.id} className="row" style={{ gap: 4 }}>
-              <FieldValue field={f} item={item} list={list!} compact />
-            </span>
-          ))}
-        </div>
-        {feeds.length > 0 && <div className="feeds-row">{feeds.map((f) => <span key={f} className="feed-chip">{f}</span>)}</div>}
-      </button>
-    );
-  }
 }
