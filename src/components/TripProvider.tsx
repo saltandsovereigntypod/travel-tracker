@@ -11,7 +11,7 @@ import { useAuth } from "./AuthProvider";
 import { useToast } from "./ui/Toast";
 import type {
   Comment, Expense, Flight, Idea, Invite, ItineraryItem, Member, Note, PackingItem, Photo,
-  Profile, Stay, Trip, TripView, Vote, PlanVote, Household, HouseholdMember,
+  Profile, Stay, Trip, TripView, Vote, PlanVote, DayVersion, DayVersionVote, Household, HouseholdMember,
 } from "@/lib/types";
 import type { ListDef, ListItem } from "@/lib/fields";
 import type { Page } from "@/lib/pages";
@@ -21,7 +21,7 @@ import { resolveModules, templateFor, type ResolvedModule, type SpaceTemplate } 
 import { voiceFor, type Voice } from "@/lib/voice";
 
 export type TableName =
-  | "ideas" | "idea_votes" | "plan_votes" | "itinerary_items" | "flights" | "stays" | "expenses"
+  | "ideas" | "idea_votes" | "plan_votes" | "day_versions" | "day_version_votes" | "itinerary_items" | "flights" | "stays" | "expenses"
   | "packing_items" | "notes" | "photos" | "comments" | "trip_members" | "trip_invites"
   | "lists" | "list_items" | "pages";
 
@@ -29,6 +29,8 @@ interface Rows {
   ideas: Idea[];
   idea_votes: Vote[];
   plan_votes: PlanVote[];
+  day_versions: DayVersion[];
+  day_version_votes: DayVersionVote[];
   itinerary_items: ItineraryItem[];
   flights: Flight[];
   stays: Stay[];
@@ -47,14 +49,14 @@ interface Rows {
 type RowOf<T extends TableName> = Rows[T][number];
 
 const TABLES: TableName[] = [
-  "ideas", "idea_votes", "plan_votes", "itinerary_items", "flights", "stays", "expenses",
+  "ideas", "idea_votes", "plan_votes", "day_versions", "day_version_votes", "itinerary_items", "flights", "stays", "expenses",
   "packing_items", "notes", "photos", "comments", "trip_members", "trip_invites",
   "lists", "list_items", "pages",
 ];
 const LIVE_TABLES = TABLES.filter((t) => t !== "trip_invites");
 
 const emptyRows = (): Rows => ({
-  ideas: [], idea_votes: [], plan_votes: [], itinerary_items: [], flights: [], stays: [], expenses: [],
+  ideas: [], idea_votes: [], plan_votes: [], day_versions: [], day_version_votes: [], itinerary_items: [], flights: [], stays: [], expenses: [],
   packing_items: [], notes: [], photos: [], comments: [], trip_members: [], trip_invites: [],
   lists: [], list_items: [], pages: [],
 });
@@ -62,6 +64,7 @@ const emptyRows = (): Rows => ({
 function keyOf(table: TableName, row: Record<string, unknown>): string {
   if (table === "idea_votes") return `${row.idea_id}:${row.user_id}`;
   if (table === "plan_votes") return `${row.item_id}:${row.user_id}`;
+  if (table === "day_version_votes") return `${row.trip_id}:${row.day}:${row.user_id}`;
   if (table === "trip_members") return `${row.trip_id}:${row.user_id}`;
   return String(row.id);
 }
@@ -114,6 +117,10 @@ interface TripContextValue {
   votePlan: (itemId: string, value: 1 | -1 | 0) => Promise<void>;
   /** Can this person change this plan? Editors can change anything; anyone can change the drafts they pencilled in. */
   canChangePlan: (item: Pick<ItineraryItem, "draft" | "created_by">) => boolean;
+  /** Vote for one version of a day (null clears your vote). */
+  voteVersion: (day: string, versionId: string | null) => Promise<void>;
+  /** Organizers: keep this version, send the others' plans back to Ideas. Returns how many went back. */
+  lockVersion: (versionId: string) => Promise<number | null>;
   photoUrl: (path: string) => string | undefined;
   ensurePhotoUrls: (paths: string[]) => Promise<void>;
   reload: () => Promise<void>;
@@ -216,7 +223,7 @@ export function TripProvider({ tripId, children }: { tripId: string; children: R
     const results = await Promise.all(
       TABLES.map((t) => {
         let q = sb.from(t).select("*").eq("trip_id", tripId);
-        if (t === "itinerary_items" || t === "packing_items" || t === "lists" || t === "list_items" || t === "pages") q = q.order("sort_order");
+        if (t === "itinerary_items" || t === "packing_items" || t === "lists" || t === "list_items" || t === "pages" || t === "day_versions") q = q.order("sort_order");
         else if (t === "trip_members") q = q.order("joined_at");
         else q = q.order("created_at");
         return q;
@@ -484,6 +491,35 @@ export function TripProvider({ tripId, children }: { tripId: string; children: R
     [tripId, me, toast],
   );
 
+  const voteVersion = useCallback(
+    async (day: string, versionId: string | null) => {
+      const sb = supabase();
+      const key = { trip_id: tripId, day, user_id: me };
+      if (!versionId) {
+        setRows((r) => ({ ...r, day_version_votes: removeRow(r.day_version_votes as never[], "day_version_votes", key) }));
+        const { error: err } = await sb.from("day_version_votes").delete().eq("trip_id", tripId).eq("day", day).eq("user_id", me);
+        if (err) toast.error(friendlyError(err));
+        return;
+      }
+      const row = { ...key, version_id: versionId };
+      setRows((r) => ({ ...r, day_version_votes: upsertRow(r.day_version_votes as never[], "day_version_votes", row as never) }));
+      const { error: err } = await sb.from("day_version_votes").upsert(row, { onConflict: "trip_id,day,user_id" });
+      if (err) toast.error(friendlyError(err));
+    },
+    [tripId, me, toast],
+  );
+  const lockVersion = useCallback(
+    async (versionId: string) => {
+      const { data, error: err } = await supabase().rpc("lock_day_version", { p_version: versionId });
+      if (err) {
+        toast.error(friendlyError(err));
+        return null;
+      }
+      return Number(data ?? 0);
+    },
+    [toast],
+  );
+
   // Personal view: debounce saves so dragging doesn't spam the database.
   const viewSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingView = useRef<Partial<TripView>>({});
@@ -590,7 +626,7 @@ export function TripProvider({ tripId, children }: { tripId: string; children: R
   const value: TripContextValue = {
     tripId, loading, error, offline, trip, rows, profiles, me, myRole, canEdit, isOwner, online,
     view: resolvedView, setPresencePage, nameOf, colorOf, insert, update, remove, updateTrip,
-    saveView, vote, votePlan, canChangePlan, photoUrl, ensurePhotoUrls, reload: load,
+    saveView, vote, votePlan, canChangePlan, voteVersion, lockVersion, photoUrl, ensurePhotoUrls, reload: load,
     households, householdMembers, householdOf, partyOf, partyName, goingIds, reloadHouseholds,
     modules, hasModule, moduleName, template, noun: template.noun, voice,
   };

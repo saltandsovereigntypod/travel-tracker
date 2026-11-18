@@ -1,7 +1,7 @@
 // The tentative itinerary: plans pencilled in, voted on and moved around until they're locked in.
 
 import { distanceKm, hasCoords, type LatLng } from "./geo";
-import type { ItineraryItem, PlanVote } from "./types";
+import type { DayVersion, DayVersionVote, ItineraryItem, PlanVote } from "./types";
 
 export interface PlanTally {
   up: number;
@@ -81,3 +81,44 @@ export function draftsOn(items: ItineraryItem[], day?: string | null): Itinerary
 
 /** Plans that are set: what Today, reminders and the share page use. */
 export const finalOnly = <T extends { draft?: boolean }>(items: T[]): T[] => items.filter((i) => !i.draft);
+
+// ---- Versions of a day ---------------------------------------------------------
+
+/** A day's versions in order; the first one holds the day's pencilled-in plans that aren't in any version. */
+export function versionsOn(versions: DayVersion[], day: string | null): DayVersion[] {
+  if (!day) return [];
+  return versions.filter((v) => v.day === day).sort((a, b) => a.sort_order - b.sort_order || a.created_at.localeCompare(b.created_at));
+}
+
+/** "A", "B", … "Z", then "27". */
+export const versionLetter = (i: number) => (i < 26 ? String.fromCharCode(65 + i) : String(i + 1));
+
+/**
+ * What a day looks like in one version: everything locked in (shared by all versions), plus that
+ * version's pencilled-in plans. The first version also has drafts that aren't in any version.
+ */
+export function itemsInVersion(items: ItineraryItem[], versions: DayVersion[], versionId: string): ItineraryItem[] {
+  if (!versions.length) return items;
+  const ids = new Set(versions.map((v) => v.id));
+  const first = versions[0].id;
+  return items.filter((i) => {
+    if (!i.draft) return true;
+    const own = i.version_id && ids.has(i.version_id) ? i.version_id : first;
+    return own === versionId;
+  });
+}
+
+export interface VersionTally {
+  counts: Record<string, number>;
+  mine: string | null;
+  /** The version most people going picked, if any has a majority. */
+  winner: string | null;
+}
+
+export function tallyVersions(votes: DayVersionVote[], day: string, me: string, going: string[]): VersionTally {
+  const today = votes.filter((v) => v.day === day);
+  const counts: Record<string, number> = {};
+  for (const v of today) if (going.includes(v.user_id)) counts[v.version_id] = (counts[v.version_id] ?? 0) + 1;
+  const winner = Object.entries(counts).find(([, n]) => hasMajority(n, going.length))?.[0] ?? null;
+  return { counts, mine: today.find((v) => v.user_id === me)?.version_id ?? null, winner };
+}

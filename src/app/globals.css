@@ -424,6 +424,18 @@ input[type="checkbox"] { accent-color: var(--accent); width: 18px; height: 18px;
 .draft-chip { margin-top: 4px; display: inline-flex; align-items: center; gap: 4px; }
 .day-summary { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; padding: 0.5rem 0.2rem 0; }
 .day-clash { display: inline-flex; align-items: center; gap: 3px; color: color-mix(in srgb, var(--danger) 80%, var(--text)); font-weight: 600; }
+/* Versions of a day */
+.versions { margin: 0.2rem 0 0.6rem; display: grid; gap: 0.5rem; }
+.version-tabs { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: thin; }
+.version-tab { display: inline-flex; align-items: center; gap: 6px; max-width: 14rem; padding: 0.35rem 0.75rem 0.35rem 0.4rem; border: 1.5px dashed var(--border); border-radius: 999px; background: var(--surface); color: var(--text); font-size: 0.82rem; cursor: pointer; flex: none; }
+.version-tab.on { border-style: solid; border-color: var(--accent); background: var(--soft); font-weight: 600; }
+.version-letter { display: inline-grid; place-items: center; width: 1.4rem; height: 1.4rem; border-radius: 50%; background: var(--accent); color: var(--surface); font-weight: 700; font-size: 0.75rem; flex: none; }
+.version-tab:not(.on) .version-letter { background: var(--muted); }
+.version-count { display: inline-flex; align-items: center; gap: 3px; font-size: 0.75rem; color: var(--muted); }
+.version-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
+.suggest-version { margin-top: 0.5rem; }
+.suggest-version-form { display: grid; gap: 6px; margin-top: 0.6rem; }
+.suggest-version-form .input { min-width: 0; flex: 1; }
 .plan-history summary { cursor: pointer; list-style: none; }
 .plan-history ul { margin: 6px 0 0; padding-left: 1rem; display: grid; gap: 3px; }
 .itin-time { font-size: 0.78rem; font-weight: 700; color: var(--accent2); min-width: 64px; padding-top: 2px; }

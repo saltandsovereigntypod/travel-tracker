@@ -16,10 +16,10 @@ import { Avatar, EmptyState, Field, PersonPicker, PlaceSearch, Segmented } from 
 import { CostEditor, costColumns, costValueFrom, type CostValue } from "../ui/CostEditor";
 import { PaymentPanel, PayStatus } from "./Payments";
 import { ScheduleModal, useBackToIdeas, useIdeaScores, useScheduleIdea } from "./Ideas";
-import { Lightbulb, ThumbsUp, ThumbsDown, Lock, LockOpen, PencilLine, AlertTriangle, History } from "lucide-react";
+import { Lightbulb, ThumbsUp, ThumbsDown, Lock, LockOpen, PencilLine, AlertTriangle, History, Split, Check, X } from "lucide-react";
 import { usePencil } from "./pencil";
 import { useToast } from "../ui/Toast";
-import { draftsOn, finalOnly, hasMajority, likesToLock, summarizeDay, tallyPlan } from "@/lib/drafts";
+import { draftsOn, finalOnly, hasMajority, itemsInVersion, likesToLock, summarizeDay, tallyPlan, tallyVersions, versionLetter, versionsOn, type VersionTally } from "@/lib/drafts";
 import { formatDistance } from "@/lib/geo";
 import type { Idea } from "@/lib/types";
 import { useMoney } from "./money";
@@ -27,7 +27,7 @@ import { CommentThread, useCommentCount } from "./Comments";
 import { categoryOf } from "@/lib/categories";
 import { addDays, daysBetween, formatDay, formatMoney, formatTime, hostname, normalizeUrl, splitLocal, todayString, tripDays } from "@/lib/format";
 import { mapsLink } from "@/lib/services";
-import type { ItineraryItem, Place } from "@/lib/types";
+import type { DayVersion, ItineraryItem, Place } from "@/lib/types";
 
 const UNSCHEDULED = "unscheduled";
 
@@ -129,6 +129,9 @@ export function ItinerarySection({ compact = false }: { compact?: boolean }) {
   // Everyone in the space can suggest (pencil in); only editors lock in.
   const canSuggest = !!myRole;
   const drafts = draftsOn(rows.itinerary_items);
+  // Days with versions are decided by picking a version, not plan by plan.
+  const versionDays = new Set(rows.day_versions.map((v) => v.day));
+  const lockable = drafts.filter((i) => !i.day || !versionDays.has(i.day));
   const shownItems = showWhich === "final" ? finalOnly(rows.itinerary_items) : rows.itinerary_items;
 
   async function lockIn(list: ItineraryItem[], what: string) {
@@ -141,7 +144,7 @@ export function ItinerarySection({ compact = false }: { compact?: boolean }) {
   const showPlanPart = useCardParts("plans");
   const fixed = useFixedEvents();
   const [layout, setLayout] = useState<"list" | "board">("list");
-  const [editing, setEditing] = useState<ItineraryItem | { day: string | null } | null>(null);
+  const [editing, setEditing] = useState<ItineraryItem | { day: string | null; version_id?: string | null } | null>(null);
   const [dragging, setDragging] = useState<ItineraryItem | null>(null);
   const [draggingIdea, setDraggingIdea] = useState<Idea | null>(null);
   const [showTray, setShowTray] = useState(true);
@@ -207,7 +210,7 @@ export function ItinerarySection({ compact = false }: { compact?: boolean }) {
       const day = raw === UNSCHEDULED ? null : raw;
       const list = itemsForDay(rows.itinerary_items, day).filter((i) => i.id !== item.id);
       const order = list.length ? list[list.length - 1].sort_order + 1 : 0;
-      if (item.day !== day || list.length) void update("itinerary_items", item.id, { day, sort_order: order });
+      if (item.day !== day || list.length) void update("itinerary_items", item.id, item.day !== day ? { day, sort_order: order, version_id: null } : { day, sort_order: order });
       return;
     }
     if (overId.startsWith("item:")) {
@@ -217,7 +220,7 @@ export function ItinerarySection({ compact = false }: { compact?: boolean }) {
       const idx = list.findIndex((i) => i.id === target.id);
       const prev = list[idx - 1];
       const order = prev ? (prev.sort_order + target.sort_order) / 2 : target.sort_order - 1;
-      void update("itinerary_items", item.id, { day: target.day, sort_order: order });
+      void update("itinerary_items", item.id, target.day !== item.day ? { day: target.day, sort_order: order, version_id: null } : { day: target.day, sort_order: order, version_id: target.version_id ?? null });
     }
   }
 
@@ -271,8 +274,8 @@ export function ItinerarySection({ compact = false }: { compact?: boolean }) {
               </label>
             )}
             {drafts.length > 0 && <Segmented size="sm" value={showWhich} onChange={setShowWhich} options={[{ value: "all", label: "Everything" }, { value: "final", label: "Locked in only" }]} />}
-            {canEdit && drafts.length > 0 && (
-              <button className="btn btn-sm btn-primary" onClick={() => void lockIn(drafts, "across the whole trip")}><Lock size={14} /> Lock in all</button>
+            {canEdit && lockable.length > 0 && (
+              <button className="btn btn-sm btn-primary" title={lockable.length < drafts.length ? "Days with versions are locked in by picking a version" : undefined} onClick={() => void lockIn(lockable, lockable.length < drafts.length ? "(days with versions are decided by picking one)" : "across the whole trip")}><Lock size={14} /> Lock in all</button>
             )}
           </div>
         </div>
@@ -325,7 +328,7 @@ export function ItinerarySection({ compact = false }: { compact?: boolean }) {
                 isToday={d === today}
                 compact={compact}
                 onOpen={setEditing}
-                onAdd={() => setEditing({ day: d })}
+                onAdd={(version_id) => setEditing({ day: d, version_id })}
                 onLock={(list) => void lockIn(list, `on ${formatDay(d, { weekday: "long" })}`)}
               />
             ))}
@@ -353,7 +356,7 @@ export function ItinerarySection({ compact = false }: { compact?: boolean }) {
 }
 
 function DayColumn({
-  day, index, items, fixed, isToday, compact, onOpen, onAdd, onLock,
+  day, index, items: allItems, fixed, isToday, compact, onOpen, onAdd, onLock,
 }: {
   day: string | null;
   index: number;
@@ -362,13 +365,21 @@ function DayColumn({
   isToday?: boolean;
   compact?: boolean;
   onOpen: (i: ItineraryItem) => void;
-  onAdd: () => void;
+  onAdd: (versionId?: string | null) => void;
   onLock?: (drafts: ItineraryItem[]) => void;
 }) {
-  const { canEdit, insert, voice, trip, myRole, canChangePlan } = useTrip();
+  const { canEdit, insert, voice, trip, myRole, canChangePlan, rows, me, goingIds } = useTrip();
   const [pencil] = usePencil();
   const money = useMoney();
   const canSuggest = !!myRole;
+  // Versions of this day: show one at a time (your pick first).
+  const versions = versionsOn(rows.day_versions, day);
+  const vt = day && versions.length ? tallyVersions(rows.day_version_votes, day, me, goingIds) : null;
+  const [picked, setPicked] = useState<string | null>(null);
+  const current = versions.find((v) => v.id === picked) ?? versions.find((v) => v.id === vt?.mine) ?? versions[0] ?? null;
+  const items = current ? itemsInVersion(allItems, versions, current.id) : allItems;
+  // New plans land in the version you're looking at (the first version holds plans without one).
+  const addVersion = current && current.id !== versions[0]?.id ? current.id : null;
   const dayDrafts = draftsOn(items);
   const sum = day && items.length ? summarizeDay(items, (i) => money.byKey[`itinerary:${i.id}`]?.total ?? null) : null;
   const rolling = voice.ongoing && !trip?.start_date;
@@ -380,7 +391,7 @@ function DayColumn({
     const title = quick.trim();
     if (!title) return;
     setQuick("");
-    await insert("itinerary_items", { title, day, draft: pencil && !!day, sort_order: items.length ? items[items.length - 1].sort_order + 1 : 0 });
+    await insert("itinerary_items", { title, day, draft: (pencil || versions.length > 0) && !!day, version_id: addVersion, sort_order: items.length ? items[items.length - 1].sort_order + 1 : 0 });
   }
 
   const merged: ({ fixed: FixedEvent } | { item: ItineraryItem })[] = [
@@ -398,11 +409,14 @@ function DayColumn({
           {dayDrafts.length > 0 && <span className="chip chip-2 draft-chip"><PencilLine size={11} /> {dayDrafts.length} pencilled in</span>}
         </div>
         {canSuggest && !compact && (
-          <button className="icon-btn" onClick={onAdd} aria-label={`Add to this day`}>
+          <button className="icon-btn" onClick={() => onAdd(addVersion)} aria-label={`Add to this day`}>
             <Plus size={18} />
           </button>
         )}
       </div>
+      {day && versions.length > 0 && current && vt && (
+        <VersionTabs day={day} versions={versions} current={current.id} tally={vt} compact={compact} onPick={setPicked} />
+      )}
       <div ref={setNodeRef} className={clsx("day-drop", isOver && "over")}>
         {merged.map((m) =>
           "fixed" in m ? (
@@ -420,10 +434,13 @@ function DayColumn({
           {sum.cost > 0 && <span>· ~{formatMoney(sum.cost, trip?.currency)}</span>}
           {sum.km >= 0.5 && <span>· {formatDistance(sum.km)} between stops</span>}
           {sum.clashes > 0 && <span className="day-clash"><AlertTriangle size={11} /> {sum.clashes} overlap{sum.clashes === 1 ? "" : "s"}</span>}
-          {canEdit && dayDrafts.length > 0 && onLock && (
+          {canEdit && dayDrafts.length > 0 && onLock && !versions.length && (
             <button className="btn btn-sm" style={{ marginLeft: "auto" }} onClick={() => onLock(dayDrafts)}><Lock size={13} /> Lock in {formatDay(day!, { weekday: "long", month: undefined, day: undefined })}</button>
           )}
         </div>
+      )}
+      {day && canSuggest && !compact && (dayDrafts.length > 0 || versions.length > 0) && (
+        <SuggestVersion day={day} versions={versions} onMade={setPicked} />
       )}
       {canSuggest && !compact && (
         <form className="quick-add" onSubmit={quickAdd}>
@@ -526,7 +543,7 @@ const blank = {
   cost: costValueFrom(null, null, "person") as CostValue, participants: [] as string[],
 };
 
-function ItemModal({ target, onClose }: { target: ItineraryItem | { day: string | null } | null; onClose: () => void }) {
+function ItemModal({ target, onClose }: { target: ItineraryItem | { day: string | null; version_id?: string | null } | null; onClose: () => void }) {
   const { trip, rows, insert, update, remove, goingIds, nameOf, colorOf, householdOf, voice, canEdit: isEditor, canChangePlan, myRole } = useTrip();
   const [pencil] = usePencil();
   const existing = target && "id" in target ? target : null;
@@ -585,9 +602,14 @@ function ItemModal({ target, onClose }: { target: ItineraryItem | { day: string 
     let ok: boolean;
     if (existing) {
       const moved = existing.day !== day || existing.start_time !== start;
-      ok = await update("itinerary_items", existing.id, moved ? { ...row, sort_order: orderForTime(dayItems, start, existing.id) } : row);
+      // A plan moved to another day leaves its version behind.
+      const left = existing.day !== day ? { version_id: null } : {};
+      ok = await update("itinerary_items", existing.id, moved ? { ...row, ...left, sort_order: orderForTime(dayItems, start, existing.id) } : row);
     } else {
-      ok = !!(await insert("itinerary_items", { ...row, draft: draft || !isEditor, sort_order: orderForTime(dayItems, start) }));
+      // Plans added inside a version are always pencilled in (versions are drafts until one wins).
+      const version = !existing && target && "version_id" in target && day === target.day ? target.version_id ?? null : null;
+      const onVersionDay = !!day && rows.day_versions.some((v) => v.day === day);
+      ok = !!(await insert("itinerary_items", { ...row, version_id: version, draft: draft || !isEditor || !!version || onVersionDay, sort_order: orderForTime(dayItems, start) }));
     }
     if (!ok) return;
     // Back to reading after an edit; a new plan just closes.
@@ -894,5 +916,126 @@ function DraftPanel({ item }: { item: ItineraryItem }) {
         </details>
       )}
     </div>
+  );
+}
+
+/** Tabs for a day's versions, with voting and locking in the one you're looking at. */
+function VersionTabs({ day, versions, current, tally, compact, onPick }: {
+  day: string;
+  versions: DayVersion[];
+  current: string;
+  tally: VersionTally;
+  compact?: boolean;
+  onPick: (id: string) => void;
+}) {
+  const { canEdit, me, goingIds, voteVersion, lockVersion, update, remove, reload, myRole } = useTrip();
+  const toast = useToast();
+  const [renaming, setRenaming] = useState<string | null>(null);
+  const [name, setName] = useState("");
+  const idx = Math.max(0, versions.findIndex((v) => v.id === current));
+  const v = versions[idx];
+  const letter = versionLetter(idx);
+  const votes = tally.counts[v.id] ?? 0;
+  const need = goingIds.length >= 2 ? Math.max(0, Math.floor(goingIds.length / 2) + 1 - votes) : null;
+  const mine = tally.mine === v.id;
+  const canChange = canEdit || v.created_by === me;
+  const label = (x: DayVersion, i: number) => x.name.trim() || (i === 0 ? "As planned" : "Untitled");
+
+  async function lock() {
+    const others = versions.length - 1;
+    if (!confirm(`Lock in ${letter}: ${label(v, idx)}? Its plans become final, and the plans in the other ${others === 1 ? "version go" : `${others} versions go`} back to Ideas (votes and comments kept).`)) return;
+    const moved = await lockVersion(v.id);
+    if (moved == null) return;
+    await reload();
+    toast.success(`${label(v, idx)} is locked in.${moved ? ` ${moved} plan${moved === 1 ? "" : "s"} went back to Ideas.` : ""}`);
+  }
+
+  return (
+    <div className="versions">
+      <div className="version-tabs" role="tablist" aria-label="Versions of this day">
+        {versions.map((x, i) => (
+          <button key={x.id} type="button" role="tab" aria-selected={x.id === v.id} className={clsx("version-tab", x.id === v.id && "on")} onClick={() => onPick(x.id)}>
+            <span className="version-letter">{versionLetter(i)}</span>
+            <span className="truncate">{label(x, i)}</span>
+            {(tally.counts[x.id] ?? 0) > 0 && <span className="version-count"><ThumbsUp size={11} /> {tally.counts[x.id]}</span>}
+            {tally.mine === x.id && <Check size={12} aria-label="Your pick" />}
+          </button>
+        ))}
+      </div>
+      {!compact && (
+        <div className="version-bar">
+          {renaming === v.id ? (
+            <form className="row grow" style={{ gap: 6 }} onSubmit={async (e) => { e.preventDefault(); if (await update("day_versions", v.id, { name: name.trim().slice(0, 60) })) setRenaming(null); }}>
+              <input className="input" autoFocus value={name} maxLength={60} onChange={(e) => setName(e.target.value)} placeholder="e.g. Beach day" aria-label="Version name" />
+              <button className="btn btn-sm btn-primary">Save</button>
+              <button type="button" className="btn btn-sm" onClick={() => setRenaming(null)}>Cancel</button>
+            </form>
+          ) : (
+            <>
+              {myRole && (mine ? (
+                <button type="button" className="btn btn-sm" onClick={() => void voteVersion(day, null)}><Check size={13} /> Your pick</button>
+              ) : (
+                <button type="button" className="btn btn-sm btn-primary" onClick={() => void voteVersion(day, v.id)}><ThumbsUp size={13} /> Vote for {letter}</button>
+              ))}
+              <span className="tiny muted grow">
+                {votes} vote{votes === 1 ? "" : "s"}
+                {need != null && need > 0 && ` · ${need} more and ${letter} wins`}
+              </span>
+              {canChange && (
+                <button type="button" className="icon-btn" aria-label={`Rename version ${letter}`} onClick={() => { setName(v.name); setRenaming(v.id); }}><Pencil size={13} /></button>
+              )}
+              {canChange && idx > 0 && (
+                <button type="button" className="icon-btn" aria-label={`Remove version ${letter}`} onClick={async () => {
+                  if (confirm(`Remove version ${letter}? Its plans stay on the day as part of ${versionLetter(0)}.`)) await remove("day_versions", v.id);
+                }}><X size={14} /></button>
+              )}
+              {canEdit && <button type="button" className="btn btn-sm" onClick={() => void lock()}><Lock size={13} /> Lock in {letter}</button>}
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** "Suggest another version of this day": the first time, today's plans become version A. */
+function SuggestVersion({ day, versions, onMade }: { day: string; versions: DayVersion[]; onMade: (id: string) => void }) {
+  const { insert } = useTrip();
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState("");
+  const [busy, setBusy] = useState(false);
+  async function make(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    let order = versions.length ? versions[versions.length - 1].sort_order + 1 : 1;
+    if (!versions.length && !(await insert("day_versions", { day, name: "As planned", sort_order: 0 }))) {
+      setBusy(false);
+      return;
+    }
+    const made = await insert("day_versions", { day, name: name.trim().slice(0, 60), sort_order: order++ });
+    setBusy(false);
+    if (!made) return;
+    setOpen(false);
+    setName("");
+    onMade(made.id);
+  }
+  if (!open) {
+    return (
+      <button type="button" className="btn btn-sm btn-ghost suggest-version" onClick={() => setOpen(true)}>
+        <Split size={14} /> Suggest another version of {formatDay(day, { weekday: "long", month: undefined, day: undefined })}
+      </button>
+    );
+  }
+  return (
+    <form className="suggest-version-form" onSubmit={make}>
+      <span className="tiny muted">
+        {versions.length ? "Add a version to compare." : "What's on the day now becomes version A. Your version starts empty, then pencil plans into it."}
+      </span>
+      <div className="row" style={{ gap: 6 }}>
+        <input className="input" autoFocus value={name} maxLength={60} onChange={(e) => setName(e.target.value)} placeholder="Name it, e.g. City day" aria-label="New version name" />
+        <button className="btn btn-sm btn-primary" disabled={busy}>Add version</button>
+        <button type="button" className="btn btn-sm" onClick={() => setOpen(false)}>Cancel</button>
+      </div>
+    </form>
   );
 }

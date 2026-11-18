@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { draftsOn, finalOnly, hasMajority, likesToLock, summarizeDay, tallyPlan } from "@/lib/drafts";
+import { draftsOn, finalOnly, hasMajority, itemsInVersion, likesToLock, summarizeDay, tallyPlan, tallyVersions, versionLetter, versionsOn } from "@/lib/drafts";
 import type { ItineraryItem, PlanVote } from "@/lib/types";
 
 const item = (p: Partial<ItineraryItem>): ItineraryItem => ({
@@ -49,5 +49,38 @@ describe("how a day is shaping up", () => {
     expect(draftsOn(all).map((i) => i.id)).toEqual(["1", "2"]);
     expect(draftsOn(all, "2027-03-12").map((i) => i.id)).toEqual(["2"]);
     expect(finalOnly(all).map((i) => i.id)).toEqual(["3"]);
+  });
+});
+
+describe("versions of a day", () => {
+  const v = (id: string, sort_order: number, day = "2027-03-11") => ({ id, trip_id: "t", day, name: id, sort_order, created_by: null, created_at: "" });
+  const versions = [v("B", 1), v("A", 0), v("X", 0, "2027-03-12")];
+  it("orders a day's versions and letters them", () => {
+    expect(versionsOn(versions, "2027-03-11").map((x) => x.id)).toEqual(["A", "B"]);
+    expect(versionsOn(versions, null)).toEqual([]);
+    expect([0, 1, 25, 26].map(versionLetter)).toEqual(["A", "B", "Z", "27"]);
+  });
+  it("shows locked-in plans in every version, and each version's own drafts", () => {
+    const day = versionsOn(versions, "2027-03-11");
+    const items = [
+      item({ id: "set" }),
+      item({ id: "loose", draft: true }),
+      item({ id: "a", draft: true, version_id: "A" }),
+      item({ id: "b", draft: true, version_id: "B" }),
+      item({ id: "gone", draft: true, version_id: "deleted" }),
+    ];
+    expect(itemsInVersion(items, day, "A").map((i) => i.id)).toEqual(["set", "loose", "a", "gone"]);
+    expect(itemsInVersion(items, day, "B").map((i) => i.id)).toEqual(["set", "b"]);
+    expect(itemsInVersion(items, [], "A")).toHaveLength(5);
+  });
+  it("counts one vote per person and finds a majority winner", () => {
+    const votes = [
+      { trip_id: "t", day: "2027-03-11", user_id: "me", version_id: "B" },
+      { trip_id: "t", day: "2027-03-11", user_id: "sam", version_id: "B" },
+      { trip_id: "t", day: "2027-03-11", user_id: "lee", version_id: "A" },
+      { trip_id: "t", day: "2027-03-12", user_id: "me", version_id: "X" },
+    ];
+    expect(tallyVersions(votes, "2027-03-11", "me", ["me", "sam", "lee"])).toEqual({ counts: { B: 2, A: 1 }, mine: "B", winner: "B" });
+    expect(tallyVersions(votes, "2027-03-11", "jo", ["me", "sam", "lee", "jo"]).winner).toBeNull();
   });
 });
