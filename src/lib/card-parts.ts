@@ -47,6 +47,7 @@ export const CARD_PARTS = {
   ],
   flights: [
     { id: "options", label: "Options you're still deciding on" },
+    { id: "stops", label: "Stops & layovers" },
     { id: "travelers", label: "Who's going on each" },
     { id: "confirmation", label: "Confirmation code" },
     { id: "seats", label: "Seats", blockOff: true },

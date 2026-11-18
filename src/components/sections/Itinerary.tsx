@@ -33,7 +33,7 @@ import { calendarEntries } from "@/lib/fields";
 import { pageTasks } from "@/lib/pages";
 import { useTravel } from "../travel/useTravel";
 import { CardOptions, useCardChoice, useCardParts } from "../ui/CardOptions";
-import { dropOff, modeOf, routeText } from "@/lib/transport";
+import { connects, dropOff, formatWait, layovers, modeOf, routeText } from "@/lib/transport";
 import { ModeIcon } from "../travel/ModeIcon";
 
 interface FixedEvent {
@@ -58,20 +58,33 @@ export function useFixedEvents() {
       if (!day) return;
       (byDay[day] ??= []).push(e);
     };
+    // Same for travel: only what's booked (or planned) shows, not options you're still comparing.
     for (const f of rows.flights) {
-      if (f.status === "cancelled") continue;
+      if (f.status !== "booked") continue;
       const dep = splitLocal(f.depart_local);
       const arr = splitLocal(f.arrive_local);
       const m = modeOf(f);
       const label = [f.airline, m.number ? f.flight_number : ""].filter(Boolean).join(" ") || m.label;
       const route = routeText(f);
-      const sub = f.status === "idea" ? "Not booked yet" : m.depart;
+      const sub = m.depart;
       add(dep.day, { key: `f-${f.id}-d`, kind: "flight", mode: m.id, time: dep.time, title: route ? `${label}${route.startsWith("at ") ? " " : ": "}${route}` : label, sub });
+      // Layovers and stops along the way.
+      for (const l of layovers(f)) {
+        const at = l.stop.code?.trim() || l.stop.name.split(",")[0].trim() || "a stop";
+        const a = splitLocal(l.stop.arrive_local ?? null);
+        const d = splitLocal(l.stop.depart_local ?? null);
+        const wait = l.minutes != null && !l.overnight ? ` · ${formatWait(l.minutes)}` : "";
+        const title = connects(m.id) ? `Layover in ${at}${wait}` : `Stop: ${at}${l.overnight ? " (overnight)" : wait}`;
+        const warn = l.warn === "tight" ? "Tight connection" : l.warn === "short" ? "Cutting it close" : "";
+        add(a.day ?? d.day, { key: `f-${f.id}-s${l.index}`, kind: "flight", mode: m.id, time: a.time ?? d.time, title, sub: warn || label });
+        if (l.overnight && d.day && d.day !== a.day) add(d.day, { key: `f-${f.id}-s${l.index}-d`, kind: "flight", mode: m.id, time: d.time, title: `Leave ${at}`, sub: label });
+      }
       if (arr.day && arr.day !== dep.day) add(arr.day, { key: `f-${f.id}-a`, kind: "flight", mode: m.id, time: arr.time, title: `${label} ${m.arrivesIn} ${dropOff(f) || "?"}`, sub: m.arrive });
     }
+    // Only booked stays are on the calendar; options you're comparing live on the Stays page.
     for (const s of rows.stays) {
-      if (s.status === "cancelled") continue;
-      add(s.check_in, { key: `s-${s.id}-in`, kind: "stay", time: s.check_in_time, title: `Check in: ${s.name}`, sub: s.status === "idea" ? "Not booked yet" : "Stay" });
+      if (s.status !== "booked") continue;
+      add(s.check_in, { key: `s-${s.id}-in`, kind: "stay", time: s.check_in_time, title: `Check in: ${s.name}`, sub: "Stay" });
       add(s.check_out, { key: `s-${s.id}-out`, kind: "stay", time: s.check_out_time, title: `Check out: ${s.name}`, sub: "Stay" });
     }
     // Dates from any custom list (deposit due, recording, bill due…) show up too.

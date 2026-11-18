@@ -134,11 +134,31 @@ export interface ItineraryItem extends CostFields {
   updated_at: string;
 }
 
+/** A layover (connecting flight/train) or a stop on a drive. */
+export interface TransportStop {
+  id: string;
+  name: string;
+  /** Airport code, for flights. */
+  code?: string;
+  lat?: number | null;
+  lng?: number | null;
+  arrive_local?: string | null;
+  depart_local?: string | null;
+  /** The leg leaving from here (the first leg uses the trip's own carrier and number). */
+  carrier?: string;
+  number?: string;
+  /** Spending the night here. */
+  overnight?: boolean;
+  note?: string;
+}
+
 export interface Flight extends CostFields {
   id: string;
   trip_id: string;
   /** Flight, train, bus, ferry, rental car, rideshare, drive… (lib/transport). */
   mode: TransportMode;
+  /** Layovers and stops between from and to, in order. */
+  stops?: TransportStop[];
   /** Pins for places that aren't airports (stations, ports, addresses). */
   from_lat?: number | null;
   from_lng?: number | null;

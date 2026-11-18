@@ -57,8 +57,8 @@ export function HomeFeed({ spaces }: { spaces: Trip[] }) {
       const [members, plans, flights, stays, lists, items, expenses, packing, pages] = await Promise.all([
         sb.from("trip_members").select("*").in("trip_id", ids),
         sb.from("itinerary_items").select("*").in("trip_id", ids).gte("day", today).lte("day", weekEnd),
-        sb.from("flights").select("*").in("trip_id", ids).neq("status", "cancelled").gte("depart_local", today).lte("depart_local", `${weekEnd}T23:59:59`),
-        sb.from("stays").select("*").in("trip_id", ids).neq("status", "cancelled").or(`and(check_in.gte.${today},check_in.lte.${weekEnd}),and(check_out.gte.${today},check_out.lte.${weekEnd})`),
+        sb.from("flights").select("*").in("trip_id", ids).eq("status", "booked").gte("depart_local", today).lte("depart_local", `${weekEnd}T23:59:59`),
+        sb.from("stays").select("*").in("trip_id", ids).eq("status", "booked").or(`and(check_in.gte.${today},check_in.lte.${weekEnd}),and(check_out.gte.${today},check_out.lte.${weekEnd})`),
         sb.from("lists").select("*").in("trip_id", ids),
         sb.from("list_items").select("*").in("trip_id", ids),
         sb.from("expenses").select("*").in("trip_id", ids),

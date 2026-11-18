@@ -6,14 +6,14 @@ import { supabase } from "@/lib/supabase";
 import { categoryOf, stayKindOf } from "@/lib/categories";
 import { formatDay, formatDayLong, formatRange, formatTime, splitLocal, tripDays } from "@/lib/format";
 import type { Place } from "@/lib/types";
-import { modeOf, routeText } from "@/lib/transport";
+import { modeOf, routeText, viaText } from "@/lib/transport";
 
 interface Shared {
   trip: { name: string; destination: string; description: string; start_date: string | null; end_date: string | null; cover_image: string | null };
   travelers: { name: string; color: string }[];
   itinerary: { day: string; start_time: string | null; end_time: string | null; title: string; category: string; location: Place }[];
   stays: { name: string; kind: string; address: string; check_in: string | null; check_out: string | null }[];
-  flights: { mode?: string; airline: string; flight_number: string; from_code: string; from_name?: string; to_code: string; to_name?: string; depart_local: string | null; arrive_local: string | null }[];
+  flights: { mode?: string; airline: string; flight_number: string; from_code: string; from_name?: string; to_code: string; to_name?: string; depart_local: string | null; arrive_local: string | null; stops?: { name: string; code?: string | null }[] }[];
 }
 
 /** Public, read-only itinerary. No account needed. Leaves out codes, costs and private things. */
@@ -65,7 +65,8 @@ export default function SharedTrip({ params }: { params: Promise<{ token: string
                 const a = splitLocal(f.arrive_local);
                 return (
                   <p key={i} className="small" style={{ marginBottom: 6 }}>
-                    <strong>{modeOf(f).emoji} {routeText({ from_name: "", to_name: "", ...f }) || modeOf(f).label}</strong>{f.airline && <> · {[f.airline, f.flight_number].filter(Boolean).join(" ")}</>}<br />
+                    <strong>{modeOf(f).emoji} {routeText({ from_name: "", to_name: "", ...f }) || modeOf(f).label}</strong>{f.airline && <> · {[f.airline, f.flight_number].filter(Boolean).join(" ")}</>}
+                    {f.stops?.length ? <span className="muted"> · {viaText({ stops: f.stops.map((x, j) => ({ id: String(j), name: x.name ?? "", code: x.code ?? "" })) })}</span> : null}<br />
                     <span className="muted">{formatDay(d.day)} {formatTime(d.time)} → {formatTime(a.time)}</span>
                   </p>
                 );

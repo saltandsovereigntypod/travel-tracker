@@ -12,7 +12,7 @@ import { itemsForDay } from "./Itinerary";
 import { mapEntries } from "@/lib/fields";
 import { useTravel } from "../travel/useTravel";
 import { stayForDay } from "@/lib/travel";
-import { modeOf, transportTitle } from "@/lib/transport";
+import { connects, journeyPoints, modeOf, transportTitle } from "@/lib/transport";
 
 const STYLE = "https://tiles.openfreemap.org/styles/liberty";
 
@@ -105,6 +105,16 @@ export function MapSection({ compact = false, height }: { compact?: boolean; hei
           if (far({ lat, lng }) || seen.has(id)) continue;
           seen.add(id);
           out.push({ id, lat, lng, emoji: m.emoji, color: "#3D5A80", title: name.split(",")[0] || m.label, sub: transportTitle(f), layer: "airport" });
+        }
+        // Layovers and stops on the way (a road trip's stops are the trip, so they always show).
+        const road = m.id === "drive" || m.id === "rideshare" || m.id === "other";
+        for (const p of journeyPoints(f, travel.airport).filter((x) => x.stop >= 0)) {
+          if (!p.at || (!road && far(p.at))) continue;
+          const id = `st${p.at.lat.toFixed(4)},${p.at.lng.toFixed(4)}`;
+          if (seen.has(id)) continue;
+          seen.add(id);
+          const st = f.stops?.[p.stop];
+          out.push({ id, lat: p.at.lat, lng: p.at.lng, emoji: st?.overnight ? "🌙" : road ? "📍" : m.emoji, color: "#3D5A80", title: p.label, sub: `${connects(m.id) ? "Layover" : "Stop"} · ${transportTitle(f)}`, layer: "airport" });
         }
       }
     }

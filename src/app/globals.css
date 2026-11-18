@@ -427,6 +427,20 @@ input[type="checkbox"] { accent-color: var(--accent); width: 18px; height: 18px;
 .pass-code { font-family: var(--font-heading); font-size: 1.9rem; font-weight: 700; letter-spacing: 0.02em; }
 /* Station and place names are longer than airport codes. */
 .pass-code.pass-place { font-size: 1.15rem; line-height: 1.2; letter-spacing: 0; max-width: 11rem; overflow-wrap: anywhere; }
+/* Stops and layovers */
+.stops-line { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; margin: -0.2rem 0 0.6rem; }
+.stop-chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px; background: var(--soft, rgba(0,0,0,0.05)); font-size: 0.75rem; line-height: 1.5; }
+.stop-chip.warn-soft { background: color-mix(in srgb, #E9C46A 28%, var(--surface)); color: color-mix(in srgb, #8a6400 70%, var(--text)); }
+.stop-chip.warn-bad { background: color-mix(in srgb, var(--danger) 14%, var(--surface)); color: color-mix(in srgb, var(--danger) 80%, var(--text)); }
+.journey { list-style: none; margin: 0; padding: 0; }
+.journey-point { display: flex; gap: 10px; align-items: flex-start; }
+.journey-dot { width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--accent); background: var(--accent); margin-top: 4px; flex: none; }
+.journey-point.is-stop .journey-dot { background: var(--surface); }
+.journey-leg { display: flex; align-items: center; gap: 6px; margin: 2px 0 2px 5px; padding: 6px 0 6px 14px; border-left: 2px dashed var(--border); }
+.journey-times { display: grid; gap: 8px; }
+.journey-times .row > .input { min-width: 0; flex: 1 1 0; }
+.journey-times .row > .input[type="time"] { flex: 0 1 9rem; }
+.journey-stop-editor { border: 1px solid var(--border); border-radius: calc(var(--radius) * 0.5 + 2px); padding: 0.75rem; display: grid; gap: 0.6rem; }
 .mode-picker { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
 .mode-picker button { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 0.55rem 0.25rem; border: 1px solid var(--border); border-radius: calc(var(--radius) * 0.5 + 2px); background: var(--surface); color: var(--text); font-size: 0.78rem; line-height: 1.15; text-align: center; cursor: pointer; }
 @media (hover: hover) { .mode-picker button:hover { border-color: var(--accent); } }

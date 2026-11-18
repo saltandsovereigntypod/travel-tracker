@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Plus, Trash2, Copy, Pencil, Check, MapPin, Navigation } from "lucide-react";
+import { Plus, Trash2, Copy, Pencil, Check, MapPin, Navigation, AlertTriangle, Moon } from "lucide-react";
 import { LinkedMemories } from "../memories/Memories";
 import { useTrip } from "../TripProvider";
 import { ModuleTitle } from "../ModuleTitle";
@@ -18,10 +18,10 @@ import { CardOptions, useCardChoice, useCardParts } from "../ui/CardOptions";
 import { leg, useTravel } from "../travel/useTravel";
 import { addDays, formatDay, formatMoney, formatTime, splitLocal } from "@/lib/format";
 import { flightOptionKey, groupFlights, stayForDay } from "@/lib/travel";
-import { MODE_LIST, dropOff, endLabel, endPoint, modeOf, routeText, transportTitle, type TransportMode } from "@/lib/transport";
+import { MODE_LIST, connects, directionsThrough, dropOff, endLabel, endPoint, formatWait, journeyKm, journeyLegs, journeyPoints, layovers, modeOf, routeText, transportTitle, type Layover, type TransportMode } from "@/lib/transport";
 import { ModeIcon } from "../travel/ModeIcon";
-import { formatDistance, hasCoords } from "@/lib/geo";
-import type { BookingStatus, Flight, Place } from "@/lib/types";
+import { formatDistance, hasCoords, travelLabel } from "@/lib/geo";
+import type { BookingStatus, Flight, Place, TransportStop } from "@/lib/types";
 
 function duration(dep: string | null, arr: string | null, mode: TransportMode = "flight"): string {
   if (!dep || !arr) return "";
@@ -110,7 +110,7 @@ export function FlightsSection({ compact = false }: { compact?: boolean }) {
                   <div className="row-between wrap" style={{ gap: 6 }}>
                     <div>
                       <span className="tiny muted options-kicker">{g.booked.length ? "Other options (one's booked)" : "Still deciding"}</span>
-                      <h3 className="row" style={{ gap: 6 }}><ModeIcon mode={g.options[0]?.mode} /> {g.key}</h3>
+                      <h3 className="row" style={{ gap: 6 }}><ModeIcon mode={g.options[0]?.mode} /> {g.key === "? → ?" ? `${modeOf(g.options[0] ?? {}).label} options` : g.key}</h3>
                     </div>
                     {g.cheapestTotal != null && <span className="chip chip-2">{g.options.length} option{g.options.length === 1 ? "" : "s"} · from {formatMoney(g.cheapestTotal, currency)}</span>}
                   </div>
@@ -208,6 +208,7 @@ function BoardingPass({ flight: f, compact, onOpen }: { flight: Flight; compact?
           <div className="pass-line"><ModeIcon mode={f.mode} size={18} /></div>
           <End f={f} side="to" align="right" />
         </div>
+        {show("stops") && <StopsLine flight={f} />}
         <div className="row-between small">
           <div>
             <strong>{timeOf(dep.time) || "—"}</strong>
@@ -319,6 +320,9 @@ function FlightDetails({ flight: f }: { flight: Flight }) {
   const from = endPoint(f, "from", travel.airport);
   const to = endPoint(f, "to", travel.airport);
   const route = from && to && (from.lat !== to.lat || from.lng !== to.lng) ? leg(from, to) : null;
+  const stops = f.stops ?? [];
+  const km = stops.length ? journeyKm(f, travel.airport) : route?.km ?? null;
+  const roadish = m.id === "drive" || m.id === "rideshare" || m.id === "rental";
   const fromAirport = m.airports ? travel.airport(f.from_code) : null;
   const toAirport = m.airports ? travel.airport(f.to_code) : null;
   const total = f.status === "idea" ? travel.flightTotal(f) : money.byKey[`flight:${f.id}`]?.total ?? null;
@@ -352,7 +356,8 @@ function FlightDetails({ flight: f }: { flight: Flight }) {
         <span className={f.status === "booked" ? "chip chip-ok" : f.status === "idea" ? "chip chip-2" : "chip chip-muted"}>{f.status === "booked" ? "Booked" : f.status === "idea" ? "Considering" : "Not chosen"}</span>
         {f.option_group && <span className="chip chip-muted">{f.option_group}</span>}
         <span className="chip chip-muted">{m.emoji} {m.label}</span>
-        {route && <span className="chip chip-muted">{formatDistance(route.km)} {m.noun}</span>}
+        {km != null && km > 0 && <span className="chip chip-muted">{formatDistance(km)} {m.noun}</span>}
+        {stops.length > 0 && <span className="chip chip-muted">{stops.length} {connects(m.id) ? (stops.length === 1 ? "connection" : "connections") : stops.length === 1 ? "stop" : "stops"}</span>}
         {duration(f.depart_local, f.arrive_local, m.id) && <span className="chip chip-muted">{duration(f.depart_local, f.arrive_local, m.id)}</span>}
       </div>
       <div className="detail-grid">
@@ -382,7 +387,8 @@ function FlightDetails({ flight: f }: { flight: Flight }) {
           </div>
         </div>
       )}
-      {route && (m.id === "drive" || m.id === "rideshare" || (m.id === "rental" && f.to_name && f.to_name !== f.from_name)) && (
+      {stops.length > 0 && <JourneyTimeline flight={f} />}
+      {!stops.length && route && (m.id === "drive" || m.id === "rideshare" || (m.id === "rental" && f.to_name && f.to_name !== f.from_name)) && (
         <div className="detail-section">
           <h3>Route</h3>
           <a className="dist-row" href={route.href} target="_blank" rel="noopener noreferrer">
@@ -449,6 +455,7 @@ function FlightForm({ flight: existing, onDone }: { flight: Flight | null; onDon
       travelers: existing?.travelers ?? (me ? [me] : []),
       cost: costValueFrom(existing?.cost ?? null, existing ?? null, perCar(existing?.mode) ? "group" : "person") as CostValue,
       notes: existing?.notes ?? "",
+      stops: (existing?.stops ?? []) as TransportStop[],
     };
   });
   const set = <K extends keyof typeof form>(k: K, v: (typeof form)[K]) => setForm((f) => ({ ...f, [k]: v }));
@@ -475,8 +482,18 @@ function FlightForm({ flight: existing, onDone }: { flight: Flight | null; onDon
           from_lat: form.from_place.lat ?? null, from_lng: form.from_place.lng ?? null,
           to_lat: form.to_place.lat ?? null, to_lng: form.to_place.lng ?? null,
         };
+    // Empty stops are dropped; dated ones are put in order.
+    const dated = (t: string | null | undefined) => (!t ? null : t.startsWith("T") ? (form.dep_day ? `${form.dep_day}${t}` : null) : t);
+    let stops = form.stops
+      .map((st) => ({ ...st, arrive_local: dated(st.arrive_local), depart_local: dated(st.depart_local) }))
+      .map((st) => (m.airports ? { ...st, code: (st.code ?? "").trim().toUpperCase(), name: st.name.trim(), lat: null, lng: null } : { ...st, code: "", name: st.name.trim() }))
+      .filter((st) => st.name || st.code);
+    const key = (st: TransportStop) => st.arrive_local || st.depart_local || "";
+    if (stops.every(key)) stops = [...stops].sort((a, b) => key(a).localeCompare(key(b)));
+    if (m.id === "rental") stops = [];
     const row = {
       mode: form.mode,
+      stops,
       airline: m.carrier ? form.airline.trim() : "",
       flight_number: m.number ? (m.airports ? form.flight_number.trim().toUpperCase() : form.flight_number.trim()) : "",
       ...ends,
@@ -503,9 +520,10 @@ function FlightForm({ flight: existing, onDone }: { flight: Flight | null; onDon
       // Cars and rides are priced for the whole group; tickets per person (until a price is typed).
       if (!f.cost.price) f = { ...f, cost: { ...f.cost, cost_unit: perCar(next) ? "group" : "person" } };
       if (was === now) return { ...f, mode: next };
+      const stops = f.stops.map((st) => (now ? { ...st, code: "", lat: null, lng: null } : { ...st, name: st.name || st.code || "", code: "" }));
       return now
-        ? { ...f, mode: next, from_name: f.from_place.name ?? "", to_name: f.to_place.name ?? "", from_code: "", to_code: "" }
-        : { ...f, mode: next, from_place: { name: f.from_name || f.from_code }, to_place: { name: f.to_name || f.to_code } };
+        ? { ...f, mode: next, stops, from_name: f.from_place.name ?? "", to_name: f.to_place.name ?? "", from_code: "", to_code: "" }
+        : { ...f, mode: next, stops, from_place: { name: f.from_name || f.from_code }, to_place: { name: f.to_name || f.to_code } };
     });
 
   return (
@@ -533,6 +551,28 @@ function FlightForm({ flight: existing, onDone }: { flight: Flight | null; onDon
           <Field label={m.from}><PlaceSearch key={`from-${form.mode}`} value={form.from_place} onChange={(p) => set("from_place", p)} near={near} placeholder={m.fromPlaceholder} /></Field>
           <Field label={m.to}><PlaceSearch key={`to-${form.mode}`} value={form.to_place} onChange={(p) => set("to_place", p)} near={near} placeholder={m.toPlaceholder} /></Field>
         </>
+      )}
+      {m.id !== "rental" && (
+        <Field label={connects(m.id) ? "Connections" : "Stops on the way"} hint={form.stops.length ? undefined : connects(m.id) ? `Changing ${m.noun}s? Add each place you connect, and the layover time is worked out for you.` : "Lunch, a viewpoint, a town you're staying the night in…"} full>
+          <div className="stack" style={{ gap: 8 }}>
+            {form.stops.map((st, i) => (
+              <StopEditor
+                key={st.id}
+                stop={st}
+                index={i}
+                mode={m}
+                near={near}
+                defaultDay={form.dep_day}
+                carrierFallback={form.airline}
+                onChange={(next) => set("stops", form.stops.map((x) => (x.id === st.id ? next : x)))}
+                onRemove={() => set("stops", form.stops.filter((x) => x.id !== st.id))}
+              />
+            ))}
+            <button type="button" className="btn btn-sm" style={{ alignSelf: "flex-start" }} onClick={() => set("stops", [...form.stops, { id: crypto.randomUUID(), name: "", code: "" }])}>
+              <Plus size={14} /> {connects(m.id) ? "Add a connection" : "Add a stop"}
+            </button>
+          </div>
+        </Field>
       )}
       <Field label={considering ? `${m.depart} around` : m.depart}><input className="input" type="date" value={form.dep_day} onChange={(e) => set("dep_day", e.target.value)} /></Field>
       {considering ? (
@@ -571,3 +611,165 @@ function FlightForm({ flight: existing, onDone }: { flight: Flight | null; onDon
 const perCar = (mode?: string | null) => mode === "rental" || mode === "drive" || mode === "rideshare";
 
 const MODES_AIR = new Set<TransportMode>(MODE_LIST.filter((x) => x.airports).map((x) => x.id));
+
+// ---------------------------------------------------------------- stops
+
+function waitLabel(l: Layover, mode: string): string {
+  if (l.overnight) return l.minutes != null && l.minutes >= 60 ? `Overnight · ${formatWait(l.minutes)}` : "Overnight";
+  if (l.minutes == null) return "";
+  return `${formatWait(l.minutes)}${connects(mode) ? " layover" : " stop"}`;
+}
+
+const WARN: Record<NonNullable<Layover["warn"]>, string> = {
+  tight: "Tight connection",
+  short: "Cutting it close",
+  long: "Long wait",
+};
+
+/** "via ORD · 1h 45m" chips on a card. */
+function StopsLine({ flight: f }: { flight: Flight }) {
+  const stops = layovers(f);
+  if (!stops.length) return null;
+  return (
+    <div className="stops-line">
+      <span className="tiny muted">{connects(f.mode) ? "via" : "stops"}</span>
+      {stops.map((l) => {
+        const label = l.stop.code?.trim() || l.stop.name.split(",")[0].trim() || "Stop";
+        const wait = waitLabel(l, f.mode);
+        return (
+          <span key={l.stop.id} className={`stop-chip${l.warn === "tight" ? " warn-bad" : l.warn === "short" ? " warn-soft" : ""}`} title={l.warn ? WARN[l.warn] : undefined}>
+            {l.overnight && <Moon size={11} />}
+            {(l.warn === "tight" || l.warn === "short") && <AlertTriangle size={11} />}
+            <strong>{label}</strong>
+            {wait && <span>· {wait.replace(" layover", "").replace(" stop", "")}</span>}
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
+/** Every leg and stop in order, with layovers, distances and directions. */
+function JourneyTimeline({ flight: f }: { flight: Flight }) {
+  const travel = useTravel();
+  const m = modeOf(f);
+  const points = journeyPoints(f, travel.airport);
+  const legs = journeyLegs(f, travel.airport);
+  const waits = layovers(f);
+  const road = m.id === "drive" || m.id === "rideshare" || m.id === "rental" || m.id === "other";
+  const href = road ? directionsThrough(points.map((p) => p.at)) : null;
+  const when = (t: string | null) => {
+    const x = splitLocal(t);
+    return [formatDay(x.day), timeOf(x.time)].filter(Boolean).join(" · ");
+  };
+  return (
+    <div className="detail-section">
+      <h3>{connects(m.id) ? "Legs & layovers" : "Stops on the way"}</h3>
+      <ol className="journey">
+        {points.map((p, i) => {
+          const l = p.stop >= 0 ? waits[p.stop] : null;
+          const next = legs[i];
+          return (
+            <li key={`${p.stop}-${i}`}>
+              <div className={`journey-point${p.stop >= 0 ? " is-stop" : ""}`}>
+                <span className="journey-dot" aria-hidden />
+                <div className="grow" style={{ minWidth: 0 }}>
+                  <strong className="small">{p.label || "—"}</strong>
+                  {p.name && p.name !== p.label && <span className="tiny muted" style={{ display: "block" }}>{p.name}</span>}
+                  <span className="tiny muted" style={{ display: "block" }}>
+                    {p.stop === -1 ? when(p.depart) && `${m.depart} ${when(p.depart)}` : p.stop === -2 ? when(p.arrive) && `${m.arrive} ${when(p.arrive)}` : [p.arrive && `Arrive ${when(p.arrive)}`, p.depart && `leave ${when(p.depart)}`].filter(Boolean).join(", ")}
+                  </span>
+                  {l && (waitLabel(l, m.id) || l.warn) && (
+                    <span className={`stop-chip${l.warn === "tight" ? " warn-bad" : l.warn === "short" ? " warn-soft" : ""}`} style={{ marginTop: 4 }}>
+                      {l.overnight ? <Moon size={11} /> : l.warn && l.warn !== "long" ? <AlertTriangle size={11} /> : null}
+                      {waitLabel(l, m.id)}{l.warn && ` · ${WARN[l.warn]}`}
+                    </span>
+                  )}
+                  {p.stop >= 0 && f.stops?.[p.stop]?.note && <span className="tiny" style={{ display: "block", marginTop: 2 }}>{f.stops[p.stop].note}</span>}
+                </div>
+              </div>
+              {next && (
+                <div className="journey-leg tiny muted">
+                  <ModeIcon mode={m.id} size={12} />
+                  {connects(m.id) && [next.carrier, next.number].filter(Boolean).join(" ")}
+                  {connects(m.id) && (next.carrier || next.number) && next.km != null && " · "}
+                  {next.km != null && (road ? travelLabel(next.km) : formatDistance(next.km))}
+                </div>
+              )}
+            </li>
+          );
+        })}
+      </ol>
+      {href && (
+        <a className="dist-row" href={href} target="_blank" rel="noopener noreferrer" style={{ marginTop: 8 }}>
+          <Navigation size={16} />
+          <span className="grow"><strong className="small">Directions through every stop</strong></span>
+          <span className="tiny">Open map</span>
+        </a>
+      )}
+    </div>
+  );
+}
+
+function StopEditor({ stop, index, mode: m, near, defaultDay, carrierFallback, onChange, onRemove }: {
+  stop: TransportStop;
+  index: number;
+  mode: ReturnType<typeof modeOf>;
+  near: { lat: number; lng: number } | null;
+  defaultDay: string;
+  carrierFallback: string;
+  onChange: (s: TransportStop) => void;
+  onRemove: () => void;
+}) {
+  const set = (patch: Partial<TransportStop>) => onChange({ ...stop, ...patch });
+  const arr = splitLocal(stop.arrive_local ?? null);
+  const dep = splitLocal(stop.depart_local ?? null);
+  const t = (x: string | null) => (x && x.slice(0, 5) !== "00:00" ? x.slice(0, 5) : "");
+  // A time with no date yet is kept as "T10:00" and gets the day you set off when saved.
+  const stamp = (d: string | null | undefined, time: string) => {
+    const day = d || defaultDay || "";
+    return day || time ? `${day}T${time || "00:00"}` : null;
+  };
+  const connecting = connects(m.id);
+  return (
+    <div className="journey-stop-editor">
+      <div className="row-between">
+        <strong className="small">{connecting ? `Connection ${index + 1}` : `Stop ${index + 1}`}</strong>
+        <button type="button" className="icon-btn" aria-label="Remove this stop" onClick={onRemove}><Trash2 size={14} /></button>
+      </div>
+      {m.airports ? (
+        <AirportInput label={`Connection ${index + 1} airport`} code={stop.code ?? ""} name={stop.name} onChange={(c, n) => set({ code: c, name: n })} placeholder="ORD or Chicago" />
+      ) : (
+        <PlaceSearch value={stop.lat != null && stop.lng != null ? { name: stop.name, lat: stop.lat, lng: stop.lng } : { name: stop.name }} onChange={(p) => set({ name: p.name ?? "", lat: p.lat ?? null, lng: p.lng ?? null })} near={near} placeholder={connecting ? "Where you change" : "Where you're stopping"} />
+      )}
+      <div className="journey-times">
+        <Field label="Arrive">
+          <div className="row" style={{ gap: 6 }}>
+            <input className="input" type="date" aria-label="Arrive date" value={arr.day ?? ""} onChange={(e) => set({ arrive_local: stamp(e.target.value, t(arr.time)) })} />
+            <input className="input" type="time" aria-label="Arrive time" value={t(arr.time)} onChange={(e) => set({ arrive_local: stamp(arr.day, e.target.value) })} />
+          </div>
+        </Field>
+        <Field label={connecting ? "Next departs" : "Leave"}>
+          <div className="row" style={{ gap: 6 }}>
+            <input className="input" type="date" aria-label="Leave date" value={dep.day ?? ""} onChange={(e) => set({ depart_local: stamp(e.target.value, t(dep.time)) })} />
+            <input className="input" type="time" aria-label="Leave time" value={t(dep.time)} onChange={(e) => set({ depart_local: stamp(dep.day, e.target.value) })} />
+          </div>
+        </Field>
+      </div>
+      <div className="form-grid" style={{ gap: 8 }}>
+        {connecting && m.carrier && (
+          <Field label={`Next ${m.carrier.toLowerCase()}`}><input className="input" value={stop.carrier ?? ""} onChange={(e) => set({ carrier: e.target.value })} placeholder={carrierFallback || m.carrierPlaceholder} /></Field>
+        )}
+        {connecting && m.number && (
+          <Field label={`Next ${m.number.toLowerCase()}`}><input className="input" value={stop.number ?? ""} onChange={(e) => set({ number: e.target.value })} placeholder={m.numberPlaceholder} /></Field>
+        )}
+      </div>
+      {!connecting && (
+        <label className="row small" style={{ gap: 8 }}>
+          <input type="checkbox" className="switch" checked={!!stop.overnight} onChange={(e) => set({ overnight: e.target.checked })} /> Staying the night here
+        </label>
+      )}
+      <input className="input" value={stop.note ?? ""} onChange={(e) => set({ note: e.target.value })} placeholder={connecting ? "Terminal, gate, platform…" : "Why you're stopping, what to see…"} maxLength={300} />
+    </div>
+  );
+}
