@@ -74,7 +74,10 @@ function ListPageInner({ listId }: { listId: string }) {
     return typeof v === "boolean" ? v : choices.defaults.has(f.id);
   };
   const today = todayString();
-  const cadenceFields = list.fields.filter((f) => f.cadence && (f.type === "date" || f.type === "datetime")).map((f) => ({ field: f, gaps: cadenceGaps(all, list, f, today, 6) }));
+  // Gaps start on the period's first day; never suggest a day that's already passed.
+  const cadenceFields = list.fields
+    .filter((f) => f.cadence && (f.type === "date" || f.type === "datetime"))
+    .map((f) => ({ field: f, gaps: cadenceGaps(all, list, f, today, 6).map((g) => (g < today ? today : g)) }));
   const progress = listProgress(list, all);
   const moneyTotal = all.reduce((n, i) => n + (itemMoneyTotal(i, list, money) ?? 0), 0);
   const titleLabel = (list.settings as { titleLabel?: string })?.titleLabel ?? "Name";

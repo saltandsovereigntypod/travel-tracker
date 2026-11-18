@@ -25,7 +25,7 @@ export function useAddOption(list: ListDef) {
 }
 
 export function ListItemModal({ list, item, onClose }: { list: ListDef; item: ListItem | null; onClose: () => void }) {
-  const { update, remove, canEdit, tripId, rows } = useTrip();
+  const { update, remove, canEdit, tripId, rows, me } = useTrip();
   const { ctx, money, itemById } = useEngine();
   const addOption = useAddOption(list);
   const commit = useCommitItem();
@@ -37,8 +37,8 @@ export function ListItemModal({ list, item, onClose }: { list: ListDef; item: Li
   if ((live?.id ?? null) !== loadedFor) {
     setLoadedFor(live?.id ?? null);
     setTitle(live?.title ?? "");
-    // Brand-new, untitled items open ready to fill in; everything else opens to read.
-    setEditing(!!live && !live.title.trim());
+    // Brand-new things (untitled, or just made by you) open ready to fill in; everything else opens to read.
+    setEditing(!!live && (!live.title.trim() || justMadeBy(live, me)));
   }
   if (!live) return null;
 
@@ -245,4 +245,9 @@ function ItemDetails({ list, item, total, income, onNavigate }: { list: ListDef;
       </div>
     </div>
   );
+}
+
+/** Made by this person in the last few seconds (so it should open ready to fill in). */
+function justMadeBy(item: { created_by: string | null; created_at: string }, me: string | null | undefined): boolean {
+  return !!me && item.created_by === me && Date.now() - new Date(item.created_at).getTime() < 20_000;
 }

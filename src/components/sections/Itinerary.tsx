@@ -6,7 +6,7 @@ import {
   DndContext, DragOverlay, PointerSensor, TouchSensor, KeyboardSensor, useDraggable, useDroppable, useSensor, useSensors,
   type DragEndEvent, type DragStartEvent,
 } from "@dnd-kit/core";
-import { Plus, Plane, BedDouble, MapPin, ExternalLink, Trash2, CalendarDays, Clock, MessageCircle, Pencil } from "lucide-react";
+import { Plus, Plane, BedDouble, MapPin, ExternalLink, Trash2, CalendarDays, Clock, MessageCircle, Pencil, Undo2 } from "lucide-react";
 import clsx from "clsx";
 import { LinkedMemories } from "../memories/Memories";
 import { useTrip } from "../TripProvider";
@@ -15,7 +15,7 @@ import { Modal } from "../ui/Modal";
 import { Avatar, EmptyState, Field, PersonPicker, PlaceSearch, Segmented } from "../ui/Fields";
 import { CostEditor, costColumns, costValueFrom, type CostValue } from "../ui/CostEditor";
 import { PaymentPanel, PayStatus } from "./Payments";
-import { ScheduleModal, useIdeaScores, useScheduleIdea } from "./Ideas";
+import { ScheduleModal, useBackToIdeas, useIdeaScores, useScheduleIdea } from "./Ideas";
 import { Lightbulb, ThumbsUp } from "lucide-react";
 import type { Idea } from "@/lib/types";
 import { useMoney } from "./money";
@@ -505,7 +505,7 @@ function ItemModal({ target, onClose }: { target: ItineraryItem | { day: string 
       }
     >
       {reading && live ? (
-        <PlanDetails item={live} />
+        <PlanDetails item={live} onClose={onClose} />
       ) : (
         <form id="itin-form" className="form-grid" onSubmit={save}>
           <fieldset disabled={!canEdit} style={{ display: "contents" }}>
@@ -565,7 +565,9 @@ function ItemModal({ target, onClose }: { target: ItineraryItem | { day: string 
   );
 }
 
-function PlanDetails({ item }: { item: ItineraryItem }) {
+function PlanDetails({ item, onClose }: { item: ItineraryItem; onClose?: () => void }) {
+  const { canEdit, hasModule, voice } = useTrip();
+  const backToIdeas = useBackToIdeas();
   const { trip, nameOf, colorOf, goingIds } = useTrip();
   const travel = useTravel();
   const money = useMoney();
@@ -608,6 +610,11 @@ function PlanDetails({ item }: { item: ItineraryItem }) {
         </div>
       )}
       {item.notes && <div className="detail-section"><h3>Notes</h3><p className="detail-notes small">{item.notes}</p></div>}
+      {canEdit && hasModule("ideas") && (
+        <button className="btn btn-sm" style={{ alignSelf: "flex-start" }} onClick={() => void backToIdeas(item).then((ok) => ok && onClose?.())}>
+          <Undo2 size={14} /> Back to {voice.ideas.thing === "idea" ? "ideas" : `${voice.ideas.thing}s`}
+        </button>
+      )}
       <LinkedMemories type="itinerary" id={item.id} />
       <PaymentPanel type="itinerary" id={item.id} category="activities" />
       <div className="detail-section">

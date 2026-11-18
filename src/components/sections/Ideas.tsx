@@ -2,10 +2,11 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { ThumbsUp, ThumbsDown, MessageCircle, Plus, ExternalLink, CalendarPlus, MapPin, Lightbulb, Trash2, Pencil } from "lucide-react";
+import { ThumbsUp, ThumbsDown, MessageCircle, Plus, ExternalLink, CalendarPlus, MapPin, Lightbulb, Trash2, Pencil, Undo2 } from "lucide-react";
 import clsx from "clsx";
 import { LinkedMemories } from "../memories/Memories";
 import { useTrip } from "../TripProvider";
+import { useToast } from "../ui/Toast";
 import { ModuleTitle } from "../ModuleTitle";
 import { Modal } from "../ui/Modal";
 import { Avatar, EmptyState, Field, PlaceSearch, Segmented } from "../ui/Fields";
@@ -18,7 +19,7 @@ import { pickCost, unitLabel } from "@/lib/costs";
 import { CommentThread, useCommentCount } from "./Comments";
 import { categoryOf } from "@/lib/categories";
 import { formatDay, formatMoney, hostname, normalizeUrl, tripDays } from "@/lib/format";
-import type { Idea, IdeaStatus, Place } from "@/lib/types";
+import type { Idea, IdeaStatus, ItineraryItem, Place } from "@/lib/types";
 import { Check } from "lucide-react";
 
 type Filter = "all" | "tovote" | IdeaStatus;
@@ -339,6 +340,8 @@ function IdeaPanel({
 }
 
 function IdeaDetails({ idea, onSchedule }: { idea: Idea; onSchedule: () => void }) {
+  const backToIdeas = useBackToIdeas();
+  const { update } = useTrip();
   const { rows, me, vote, nameOf, colorOf, canEdit, trip, goingIds, householdOf, voice } = useTrip();
   const scores = useIdeaScores();
   const s = scores[idea.id] ?? { up: 0, down: 0, score: 0 };
@@ -388,6 +391,19 @@ function IdeaDetails({ idea, onSchedule }: { idea: Idea; onSchedule: () => void 
       </div>
       {canEdit && idea.status !== "planned" && (
         <button className="btn btn-primary" style={{ alignSelf: "flex-start" }} onClick={onSchedule}><CalendarPlus size={15} /> {voice.ideas.schedule}</button>
+      )}
+      {canEdit && idea.status === "planned" && (
+        <button
+          className="btn"
+          style={{ alignSelf: "flex-start" }}
+          onClick={async () => {
+            const plan = rows.itinerary_items.find((i) => i.idea_id === idea.id);
+            if (plan) await backToIdeas(plan);
+            else await update("ideas", idea.id, { status: "open" });
+          }}
+        >
+          <Undo2 size={15} /> Take it off the calendar
+        </button>
       )}
       <LinkedMemories type="idea" id={idea.id} />
       <div className="detail-section">
@@ -505,6 +521,43 @@ export function useScheduleIdea() {
     });
     if (item) await update("ideas", idea.id, { status: "planned" });
     return item;
+  };
+}
+
+/**
+ * Take a plan off the calendar and put it back with the ideas. A plan that came from an
+ * idea returns to it (votes and comments intact); any other plan becomes a new idea.
+ */
+export function useBackToIdeas() {
+  const { rows, insert, update, remove, me, voice } = useTrip();
+  const toast = useToast();
+  return async (plan: ItineraryItem): Promise<boolean> => {
+    const payments = rows.expenses.filter((e) => e.linked_type === "itinerary" && e.linked_id === plan.id).length;
+    const idea = plan.idea_id ? rows.ideas.find((i) => i.id === plan.idea_id) : undefined;
+    const msg =
+      `Move "${plan.title}" back to ${voice.ideas.thing === "idea" ? "ideas" : `${voice.ideas.thing}s`}? It comes off the calendar` +
+      (idea ? "; its votes and comments are kept." : " and becomes an idea.") +
+      (payments ? ` Its ${payments} payment${payments === 1 ? " stays" : "s stay"} in the budget.` : "");
+    if (!window.confirm(msg)) return false;
+    if (idea) {
+      await update("ideas", idea.id, { status: "open" });
+    } else {
+      const made = await insert("ideas", {
+        title: plan.title,
+        description: plan.notes ?? "",
+        category: plan.category,
+        location: plan.location,
+        url: plan.url,
+        est_cost: plan.cost,
+        ...pickCost(plan),
+        status: "open",
+        created_by: me,
+      });
+      if (!made) return false;
+    }
+    const ok = await remove("itinerary_items", plan.id);
+    if (ok) toast.success(`"${plan.title}" is back with the ${voice.ideas.thing === "idea" ? "ideas" : `${voice.ideas.thing}s`}.`);
+    return ok;
   };
 }
 
