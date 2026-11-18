@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  Home, Sun, Lightbulb, CalendarDays, Plane, BedDouble, Wallet, Luggage, Map, NotebookPen,
+  Home, Sun, Lightbulb, CalendarDays, Route, BedDouble, Wallet, Luggage, Map, NotebookPen,
   Camera, Users, BookHeart, Settings2, MoreHorizontal, Loader2, WifiOff,
 } from "lucide-react";
 import clsx from "clsx";
@@ -22,7 +22,7 @@ export const MODULE_ICONS: Record<string, typeof Home> = {
   today: Sun,
   ideas: Lightbulb,
   itinerary: CalendarDays,
-  flights: Plane,
+  flights: Route,
   stays: BedDouble,
   budget: Wallet,
   packing: Luggage,

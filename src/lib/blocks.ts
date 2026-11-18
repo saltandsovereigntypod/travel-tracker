@@ -18,7 +18,7 @@ export const BLOCKS: BlockMeta[] = [
   { type: "today", label: "Today / Up next", description: "What's happening now", group: "Trip info", defaultWidth: "two-thirds", boardSize: { w: 440, h: 320 }, section: "today" },
   { type: "ideas", label: "Ideas", description: "Everyone's wishlist, with votes", group: "Trip info", defaultWidth: "full", boardSize: { w: 620, h: 460 }, section: "ideas" },
   { type: "itinerary", label: "Itinerary", description: "Day-by-day plan", group: "Trip info", defaultWidth: "full", boardSize: { w: 620, h: 520 }, section: "itinerary" },
-  { type: "flights", label: "Flights", description: "Boarding passes", group: "Trip info", defaultWidth: "half", boardSize: { w: 440, h: 340 }, section: "flights" },
+  { type: "flights", label: "Getting around", description: "Flights, trains, rental cars and rides", group: "Trip info", defaultWidth: "half", boardSize: { w: 440, h: 340 }, section: "flights" },
   { type: "stays", label: "Stays", description: "Hotels, hostels, rentals", group: "Trip info", defaultWidth: "half", boardSize: { w: 440, h: 340 }, section: "stays" },
   { type: "budget", label: "Budget", description: "Spending and who owes whom", group: "Trip info", defaultWidth: "half", boardSize: { w: 420, h: 340 }, section: "budget" },
   { type: "packing", label: "Checklists", description: "Shared and personal lists", group: "Trip info", defaultWidth: "half", boardSize: { w: 380, h: 420 }, section: "packing" },

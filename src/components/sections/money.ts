@@ -9,6 +9,7 @@ import { costTotal, participantsOf, pickCost } from "@/lib/costs";
 import { daysBetween } from "@/lib/format";
 import type { Expense, Flight, Idea, ItineraryItem, LinkedType, Stay } from "@/lib/types";
 import { asDate, itemIncomeTotal, itemMoneyTotal, itemParticipants, repeatOf } from "@/lib/fields";
+import { transportTitle } from "@/lib/transport";
 
 export function homeAmount(e: Expense, tripCurrency: string): number {
   if (e.currency === tripCurrency) return Number(e.amount);
@@ -80,7 +81,7 @@ export function useMoney() {
       .filter((f) => f.status === "booked")
       .map((f) => {
         const participants = participantsForFlight(f, goingIds);
-        const label = [f.airline, f.flight_number].filter(Boolean).join(" ") || `Flight ${f.from_code}→${f.to_code}`;
+        const label = transportTitle(f);
         return build("flight", f.id, label, f.depart_local?.slice(0, 10) ?? null, participants, costTotal(f.cost, pickCost(f), { ...ctxBase, participants }));
       });
     const stays = rows.stays

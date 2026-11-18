@@ -1,18 +1,19 @@
 "use client";
 
 import { use, useEffect, useState } from "react";
-import { Loader2, MapPin, CalendarDays, Plane, BedDouble } from "lucide-react";
+import { Loader2, MapPin, CalendarDays, Route, BedDouble } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { categoryOf, stayKindOf } from "@/lib/categories";
 import { formatDay, formatDayLong, formatRange, formatTime, splitLocal, tripDays } from "@/lib/format";
 import type { Place } from "@/lib/types";
+import { modeOf, routeText } from "@/lib/transport";
 
 interface Shared {
   trip: { name: string; destination: string; description: string; start_date: string | null; end_date: string | null; cover_image: string | null };
   travelers: { name: string; color: string }[];
   itinerary: { day: string; start_time: string | null; end_time: string | null; title: string; category: string; location: Place }[];
   stays: { name: string; kind: string; address: string; check_in: string | null; check_out: string | null }[];
-  flights: { airline: string; flight_number: string; from_code: string; to_code: string; depart_local: string | null; arrive_local: string | null }[];
+  flights: { mode?: string; airline: string; flight_number: string; from_code: string; from_name?: string; to_code: string; to_name?: string; depart_local: string | null; arrive_local: string | null }[];
 }
 
 /** Public, read-only itinerary. No account needed. Leaves out codes, costs and private things. */
@@ -58,13 +59,13 @@ export default function SharedTrip({ params }: { params: Promise<{ token: string
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "1rem", marginTop: "1rem" }}>
           {data.flights.length > 0 && (
             <div className="card">
-              <h3 className="row" style={{ marginBottom: 8 }}><Plane size={18} /> Flights</h3>
+              <h3 className="row" style={{ marginBottom: 8 }}><Route size={18} /> Getting around</h3>
               {data.flights.map((f, i) => {
                 const d = splitLocal(f.depart_local);
                 const a = splitLocal(f.arrive_local);
                 return (
                   <p key={i} className="small" style={{ marginBottom: 6 }}>
-                    <strong>{f.from_code} → {f.to_code}</strong> · {[f.airline, f.flight_number].filter(Boolean).join(" ")}<br />
+                    <strong>{modeOf(f).emoji} {routeText({ from_name: "", to_name: "", ...f }) || modeOf(f).label}</strong>{f.airline && <> · {[f.airline, f.flight_number].filter(Boolean).join(" ")}</>}<br />
                     <span className="muted">{formatDay(d.day)} {formatTime(d.time)} → {formatTime(a.time)}</span>
                   </p>
                 );

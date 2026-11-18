@@ -2,12 +2,12 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Plane, Plus, Trash2, Copy, Pencil, Check, MapPin } from "lucide-react";
+import { Plus, Trash2, Copy, Pencil, Check, MapPin, Navigation } from "lucide-react";
 import { LinkedMemories } from "../memories/Memories";
 import { useTrip } from "../TripProvider";
 import { ModuleTitle } from "../ModuleTitle";
 import { Modal } from "../ui/Modal";
-import { Avatar, EmptyState, Field, PersonPicker, Segmented } from "../ui/Fields";
+import { Avatar, EmptyState, Field, PersonPicker, PlaceSearch, Segmented } from "../ui/Fields";
 import { useToast } from "../ui/Toast";
 import { CommentThread } from "./Comments";
 import { CostEditor, costColumns, costValueFrom, type CostValue } from "../ui/CostEditor";
@@ -18,18 +18,27 @@ import { CardOptions, useCardChoice, useCardParts } from "../ui/CardOptions";
 import { leg, useTravel } from "../travel/useTravel";
 import { addDays, formatDay, formatMoney, formatTime, splitLocal } from "@/lib/format";
 import { flightOptionKey, groupFlights, stayForDay } from "@/lib/travel";
+import { MODE_LIST, dropOff, endLabel, endPoint, modeOf, routeText, transportTitle, type TransportMode } from "@/lib/transport";
+import { ModeIcon } from "../travel/ModeIcon";
 import { formatDistance, hasCoords } from "@/lib/geo";
-import type { BookingStatus, Flight } from "@/lib/types";
+import type { BookingStatus, Flight, Place } from "@/lib/types";
 
-function duration(dep: string | null, arr: string | null): string {
-  // Local times at two airports can't give true duration without time zones,
-  // so only show it when both are on the same day-ish and arrival is later.
+function duration(dep: string | null, arr: string | null, mode: TransportMode = "flight"): string {
   if (!dep || !arr) return "";
   const a = new Date(dep).getTime();
   const b = new Date(arr).getTime();
-  if (!(b > a) || b - a > 30 * 3600_000) return "";
+  if (!(b > a)) return "";
+  // Rental cars: how many days you have it.
+  if (mode === "rental") {
+    const days = Math.max(1, Math.round((b - a) / 86_400_000));
+    return `${days} day${days === 1 ? "" : "s"}`;
+  }
+  // Local times in two places can't give a true duration without time zones,
+  // so only show it when arrival is later and within a day or so.
+  if (b - a > 30 * 3600_000) return "";
   const mins = Math.round((b - a) / 60000);
-  return `${Math.floor(mins / 60)}h ${mins % 60}m (local times)`;
+  const h = Math.floor(mins / 60);
+  return `${h ? `${h}h ` : ""}${mins % 60}m${mode === "flight" ? " (local times)" : ""}`;
 }
 
 /** Midnight means "time not known yet" (rough dates for flights you're still considering). */
@@ -42,7 +51,21 @@ export function flightDay(f: Pick<Flight, "depart_local" | "date_flex">): string
   return f.date_flex ? `Around ${formatDay(d)} (±${f.date_flex} day${f.date_flex === 1 ? "" : "s"})` : formatDay(d);
 }
 
-const flightLabel = (f: Flight) => [f.airline, f.flight_number].filter(Boolean).join(" ") || `${f.from_code || f.from_name || "?"} → ${f.to_code || f.to_name || "?"}`;
+/** One end of the route, big: an airport code, or a place name in smaller type. */
+function End({ f, side, align }: { f: Flight; side: "from" | "to"; align?: "right" }) {
+  const code = (side === "from" ? f.from_code : f.to_code)?.trim();
+  // A rental car returned where you got it.
+  const sameSpot = side === "to" && f.mode === "rental" && dropOff(f) === endLabel(f, "from");
+  const label = sameSpot ? "Same place" : side === "to" ? dropOff(f) : endLabel(f, "from");
+  const full = sameSpot ? "" : side === "from" ? f.from_name : f.to_name;
+  const sub = code ? full : full && full.split(",").slice(1).join(",").trim();
+  return (
+    <div style={{ textAlign: align, minWidth: 0 }}>
+      <div className={code ? "pass-code" : "pass-code pass-place"} style={align ? { marginLeft: "auto" } : undefined}>{label || "—"}</div>
+      {sub && <div className="tiny muted truncate" style={{ maxWidth: 140, marginLeft: align ? "auto" : undefined }}>{sub}</div>}
+    </div>
+  );
+}
 
 export function FlightsSection({ compact = false }: { compact?: boolean }) {
   const { rows, canEdit, tripId, trip } = useTrip();
@@ -65,18 +88,18 @@ export function FlightsSection({ compact = false }: { compact?: boolean }) {
       {!compact && (
         <div className="section-head">
           <div>
-            <ModuleTitle id="flights" fallback="Flights" />
-            <p>Who&apos;s flying when, with confirmation codes in one place. Add flights you&apos;re still considering too, with a rough date and price.</p>
+            <ModuleTitle id="flights" fallback="Getting around" />
+            <p>Flights, trains, buses, ferries, rental cars, rides and drives: who&apos;s going when, with confirmation codes in one place. Add options you&apos;re still considering too, with a rough date and price.</p>
           </div>
           <div className="toolbar">
-            <CardOptions kind="flights" title="Flight cards" />
-            {canEdit && <button className="btn btn-primary" onClick={() => setOpen({ flight: "new", edit: true })}><Plus size={16} /> Add flight</button>}
+            <CardOptions kind="flights" title="Travel cards" />
+            {canEdit && <button className="btn btn-primary" onClick={() => setOpen({ flight: "new", edit: true })}><Plus size={16} /> Add travel</button>}
           </div>
         </div>
       )}
       {flights.length === 0 ? (
-        <EmptyState icon={<Plane />} title="No flights yet" action={canEdit && <button className="btn btn-sm" onClick={() => setOpen({ flight: "new", edit: true })}><Plus size={14} /> Add a flight</button>}>
-          Not booked yet? Add the ones you&apos;re looking at with a rough date and price. They go into the budget as an estimate until you book.
+        <EmptyState icon={<ModeIcon mode="flight" size={28} />} title="No travel added yet" action={canEdit && <button className="btn btn-sm" onClick={() => setOpen({ flight: "new", edit: true })}><Plus size={14} /> Add travel</button>}>
+          Flights, trains, buses, ferries, rental cars, rideshares or a road trip. Not booked yet? Add the ones you&apos;re looking at with a rough date and price. They go into the budget as an estimate until you book.
         </EmptyState>
       ) : (
         <div className="stack">
@@ -87,7 +110,7 @@ export function FlightsSection({ compact = false }: { compact?: boolean }) {
                   <div className="row-between wrap" style={{ gap: 6 }}>
                     <div>
                       <span className="tiny muted options-kicker">{g.booked.length ? "Other options (one's booked)" : "Still deciding"}</span>
-                      <h3 className="row" style={{ gap: 6 }}><Plane size={16} /> {g.key}</h3>
+                      <h3 className="row" style={{ gap: 6 }}><ModeIcon mode={g.options[0]?.mode} /> {g.key}</h3>
                     </div>
                     {g.cheapestTotal != null && <span className="chip chip-2">{g.options.length} option{g.options.length === 1 ? "" : "s"} · from {formatMoney(g.cheapestTotal, currency)}</span>}
                   </div>
@@ -109,7 +132,7 @@ export function FlightsSection({ compact = false }: { compact?: boolean }) {
         </div>
       )}
       {compact && live.length > shown.length && (
-        <Link className="btn btn-sm btn-ghost" style={{ marginTop: 8 }} href={`/trips/${tripId}/flights`}>All flights →</Link>
+        <Link className="btn btn-sm btn-ghost" style={{ marginTop: 8 }} href={`/trips/${tripId}/flights`}>All travel →</Link>
       )}
       <FlightPanel open={open} onClose={() => setOpen(null)} onEdit={(f) => setOpen({ flight: f, edit: true })} onView={(f) => setOpen({ flight: f, edit: false })} />
     </div>
@@ -140,7 +163,7 @@ function OptionRow({ flight: f, cheapest, others, onOpen }: { flight: Flight; ch
   return (
     <div className="option-row" role="button" tabIndex={0} onClick={onOpen} onKeyDown={(e) => e.key === "Enter" && onOpen()}>
       <div className="grow" style={{ minWidth: 0 }}>
-        <strong className="truncate" style={{ display: "block" }}>{[f.airline, f.flight_number].filter(Boolean).join(" ") || "Any airline"}</strong>
+        <strong className="truncate row" style={{ gap: 6 }}><ModeIcon mode={f.mode} size={14} /> {[f.airline, modeOf(f).number ? f.flight_number : ""].filter(Boolean).join(" ") || `Any ${modeOf(f).carrier?.toLowerCase() ?? modeOf(f).noun}`}</strong>
         <span className="tiny muted">{flightDay(f)}{timeOf(dep.time) && ` · ${timeOf(dep.time)}`}</span>
       </div>
       <div style={{ textAlign: "right" }}>
@@ -169,33 +192,28 @@ function BoardingPass({ flight: f, compact, onOpen }: { flight: Flight; compact?
   const toast = useToast();
   const dep = splitLocal(f.depart_local);
   const arr = splitLocal(f.arrive_local);
+  const m = modeOf(f);
   return (
     <article className="card pass card-hover" style={{ cursor: "pointer", opacity: f.status === "cancelled" ? 0.5 : 1 }} onClick={onOpen}>
       <div className="pass-main">
         <div className="row-between">
           <span className="tiny muted" style={{ fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase" }}>
-            {[f.airline, f.flight_number].filter(Boolean).join(" · ") || "Flight"}
+            {m.emoji} {[f.airline, m.number ? f.flight_number : ""].filter(Boolean).join(" · ") || m.label}
           </span>
           {f.status === "idea" && <span className="chip chip-2">Not booked</span>}
           {f.status === "cancelled" && <span className="chip chip-muted">Not chosen</span>}
         </div>
         <div className="pass-route">
-          <div>
-            <div className="pass-code">{f.from_code || "—"}</div>
-            <div className="tiny muted truncate" style={{ maxWidth: 120 }}>{f.from_name}</div>
-          </div>
-          <div className="pass-line"><Plane size={18} /></div>
-          <div style={{ textAlign: "right" }}>
-            <div className="pass-code">{f.to_code || "—"}</div>
-            <div className="tiny muted truncate" style={{ maxWidth: 120 }}>{f.to_name}</div>
-          </div>
+          <End f={f} side="from" />
+          <div className="pass-line"><ModeIcon mode={f.mode} size={18} /></div>
+          <End f={f} side="to" align="right" />
         </div>
         <div className="row-between small">
           <div>
             <strong>{timeOf(dep.time) || "—"}</strong>
             <div className="tiny muted">{f.date_flex ? flightDay(f) : formatDay(dep.day)}</div>
           </div>
-          <span className="tiny muted hide-sm">{duration(f.depart_local, f.arrive_local)}</span>
+          <span className="tiny muted hide-sm">{duration(f.depart_local, f.arrive_local, m.id)}</span>
           <div style={{ textAlign: "right" }}>
             <strong>{timeOf(arr.time) || "—"}</strong>
             <div className="tiny muted">{formatDay(arr.day)}</div>
@@ -211,7 +229,7 @@ function BoardingPass({ flight: f, compact, onOpen }: { flight: Flight; compact?
         )}
       </div>
       <div className="pass-stub">
-        {show("confirmation") && <><span className="tiny muted">Confirmation</span>
+        {show("confirmation") && m.confirmation && <><span className="tiny muted">Confirmation</span>
         {f.confirmation ? (
           <button
             className="btn btn-sm btn-ghost"
@@ -264,7 +282,7 @@ function FlightPanel({ open, onClose, onEdit, onView }: { open: { flight: Flight
       open={!!open && (open.flight === "new" || !!live)}
       onClose={onClose}
       variant="panel"
-      title={open?.flight === "new" ? "Add a flight" : live ? flightLabel(live) : ""}
+      title={open?.flight === "new" ? "Add travel" : live ? transportTitle(live) : ""}
       actions={!editing && live && canEdit ? <button className="btn btn-sm" onClick={() => onEdit(live)}><Pencil size={14} /> Edit</button> : undefined}
       footer={editing && canEdit ? <FormFooter flight={live} onClose={onClose} onCancel={live ? () => onView(live) : onClose} /> : undefined}
     >
@@ -278,13 +296,13 @@ function FormFooter({ flight, onClose, onCancel }: { flight: Flight | null; onCl
   return (
     <>
       {flight && (
-        <button className="btn btn-danger" type="button" onClick={async () => { if (confirm("Delete this flight?")) { await remove("flights", flight.id); onClose(); } }}>
+        <button className="btn btn-danger" type="button" onClick={async () => { if (confirm(`Delete this ${modeOf(flight).noun}?`)) { await remove("flights", flight.id); onClose(); } }}>
           <Trash2 size={15} /> Delete
         </button>
       )}
       <span className="spacer" />
       <button className="btn" type="button" onClick={onCancel}>Cancel</button>
-      <button className="btn btn-primary" form="flight-form">{flight ? "Save" : "Add flight"}</button>
+      <button className="btn btn-primary" form="flight-form">{flight ? "Save" : "Add"}</button>
     </>
   );
 }
@@ -297,11 +315,15 @@ function FlightDetails({ flight: f }: { flight: Flight }) {
   const money = useMoney();
   const dep = splitLocal(f.depart_local);
   const arr = splitLocal(f.arrive_local);
-  const from = travel.airport(f.from_code);
-  const to = travel.airport(f.to_code);
+  const m = modeOf(f);
+  const from = endPoint(f, "from", travel.airport);
+  const to = endPoint(f, "to", travel.airport);
+  const route = from && to && (from.lat !== to.lat || from.lng !== to.lng) ? leg(from, to) : null;
+  const fromAirport = m.airports ? travel.airport(f.from_code) : null;
+  const toAirport = m.airports ? travel.airport(f.to_code) : null;
   const total = f.status === "idea" ? travel.flightTotal(f) : money.byKey[`flight:${f.id}`]?.total ?? null;
   const people = Math.max(1, f.travelers.length || 1);
-  // Where you're headed after landing.
+  // Where you're headed after arriving.
   const landDay = arr.day ?? dep.day;
   const stay = landDay ? stayForDay(rows.stays, landDay) ?? stayForDay(rows.stays, addDays(landDay, 1)) : null;
   const toStay = stay && to && hasCoords(stay.location) ? leg(to, stay.location) : null;
@@ -310,34 +332,43 @@ function FlightDetails({ flight: f }: { flight: Flight }) {
   return (
     <div className="detail">
       <div className="pass-route" style={{ padding: 0 }}>
-        <div>
-          <div className="pass-code">{f.from_code || "—"}</div>
-          <div className="tiny muted">{from?.name ?? f.from_name}</div>
+        <div style={{ minWidth: 0 }}>
+          <div className={f.from_code ? "pass-code" : "pass-code pass-place"}>{endLabel(f, "from") || "—"}</div>
+          <div className="tiny muted">{fromAirport?.name ?? (f.from_code ? f.from_name : f.from_name.split(",").slice(1).join(",").trim())}</div>
         </div>
-        <div className="pass-line"><Plane size={18} /></div>
-        <div style={{ textAlign: "right" }}>
-          <div className="pass-code">{f.to_code || "—"}</div>
-          <div className="tiny muted">{to?.name ?? f.to_name}</div>
+        <div className="pass-line"><ModeIcon mode={f.mode} size={18} /></div>
+        <div style={{ textAlign: "right", minWidth: 0 }}>
+          {m.id === "rental" && dropOff(f) === endLabel(f, "from") ? (
+            <div className="pass-code pass-place" style={{ marginLeft: "auto" }}>Same place</div>
+          ) : (
+            <>
+              <div className={f.to_code ? "pass-code" : "pass-code pass-place"} style={{ marginLeft: "auto" }}>{dropOff(f) || "—"}</div>
+              <div className="tiny muted">{toAirport?.name ?? (f.to_code ? f.to_name : (f.to_name || "").split(",").slice(1).join(",").trim())}</div>
+            </>
+          )}
         </div>
       </div>
       <div className="row wrap" style={{ gap: 6 }}>
         <span className={f.status === "booked" ? "chip chip-ok" : f.status === "idea" ? "chip chip-2" : "chip chip-muted"}>{f.status === "booked" ? "Booked" : f.status === "idea" ? "Considering" : "Not chosen"}</span>
         {f.option_group && <span className="chip chip-muted">{f.option_group}</span>}
-        {from && to && <span className="chip chip-muted">{formatDistance(distanceBetween(from, to))} flight</span>}
+        <span className="chip chip-muted">{m.emoji} {m.label}</span>
+        {route && <span className="chip chip-muted">{formatDistance(route.km)} {m.noun}</span>}
+        {duration(f.depart_local, f.arrive_local, m.id) && <span className="chip chip-muted">{duration(f.depart_local, f.arrive_local, m.id)}</span>}
       </div>
       <div className="detail-grid">
-        <div><small>Departs</small>{f.date_flex ? flightDay(f) : formatDay(dep.day) || "—"}{timeOf(dep.time) && <> · {timeOf(dep.time)}</>}</div>
-        <div><small>Arrives</small>{formatDay(arr.day) || "—"}{timeOf(arr.time) && <> · {timeOf(arr.time)}</>}</div>
-        <div><small>Flight</small>{[f.airline, f.flight_number].filter(Boolean).join(" ") || "—"}</div>
-        <div>
+        <div><small>{m.depart}</small>{f.date_flex ? flightDay(f) : formatDay(dep.day) || "—"}{timeOf(dep.time) && <> · {timeOf(dep.time)}</>}</div>
+        <div><small>{m.arrive}</small>{formatDay(arr.day) || "—"}{timeOf(arr.time) && <> · {timeOf(arr.time)}</>}</div>
+        {m.carrier && <div><small>{m.carrier}</small>{f.airline || "—"}</div>}
+        {m.number && <div><small>{m.number}</small>{f.flight_number || "—"}</div>}
+        {m.confirmation && <div>
           <small>Confirmation</small>
           {f.confirmation ? (
             <button className="link-btn" onClick={() => { void navigator.clipboard?.writeText(f.confirmation); toast.success("Copied"); }} style={{ fontFamily: "monospace", letterSpacing: "0.06em" }}>
               {f.confirmation} <Copy size={11} />
             </button>
           ) : "—"}
-        </div>
-        {f.seats && <div><small>Seats</small>{f.seats}</div>}
+        </div>}
+        {m.seats && f.seats && <div><small>{m.seats}</small>{f.seats}</div>}
         <div>
           <small>{f.status === "idea" ? "Estimated price" : "Price"}</small>
           {total != null ? <>{f.status === "idea" && "≈ "}{formatMoney(total, trip?.currency)}{people > 1 && <span className="tiny muted"> · {formatMoney(total / people, trip?.currency)} each</span>}</> : "—"}
@@ -345,18 +376,28 @@ function FlightDetails({ flight: f }: { flight: Flight }) {
       </div>
       {f.travelers.length > 0 && (
         <div className="detail-section">
-          <h3>Who&apos;s flying</h3>
+          <h3>{m.who}</h3>
           <div className="row wrap" style={{ gap: 8 }}>
             {f.travelers.map((id) => <span key={id} className="row small" style={{ gap: 5 }}><Avatar name={nameOf(id)} color={colorOf(id)} size={22} /> {nameOf(id)}</span>)}
           </div>
         </div>
       )}
-      {toStay && stay && (
+      {route && (m.id === "drive" || m.id === "rideshare" || (m.id === "rental" && f.to_name && f.to_name !== f.from_name)) && (
         <div className="detail-section">
-          <h3>After you land</h3>
+          <h3>Route</h3>
+          <a className="dist-row" href={route.href} target="_blank" rel="noopener noreferrer">
+            <Navigation size={16} />
+            <span className="grow"><strong className="small">{routeText(f)}</strong><span className="tiny muted" style={{ display: "block" }}>{route.label}</span></span>
+            <span className="tiny">Directions</span>
+          </a>
+        </div>
+      )}
+      {toStay && stay && m.id !== "rental" && (
+        <div className="detail-section">
+          <h3>After you {m.id === "flight" ? "land" : "arrive"}</h3>
           <a className="dist-row" href={toStay.href} target="_blank" rel="noopener noreferrer">
             <MapPin size={16} />
-            <span className="grow"><strong className="small">{f.to_code} → {stay.name}</strong><span className="tiny muted" style={{ display: "block" }}>{toStay.label}</span></span>
+            <span className="grow"><strong className="small">{dropOff(f)} → {stay.name}</strong><span className="tiny muted" style={{ display: "block" }}>{toStay.label}</span></span>
             <span className="tiny">Directions</span>
           </a>
         </div>
@@ -366,17 +407,13 @@ function FlightDetails({ flight: f }: { flight: Flight }) {
       )}
       {f.notes && <div className="detail-section"><h3>Notes</h3><p className="detail-notes small">{f.notes}</p></div>}
       <LinkedMemories type="flight" id={f.id} />
-      {f.status === "booked" && <PaymentPanel type="flight" id={f.id} category="flights" />}
+      {f.status === "booked" && <PaymentPanel type="flight" id={f.id} category={m.category} />}
       <div className="detail-section">
         <h3>Comments</h3>
         <CommentThread entity="flight" id={f.id} />
       </div>
     </div>
   );
-}
-
-function distanceBetween(a: { lat: number; lng: number }, b: { lat: number; lng: number }) {
-  return leg(a, b).km;
 }
 
 // ---------------------------------------------------------------- form
@@ -389,13 +426,17 @@ function FlightForm({ flight: existing, onDone }: { flight: Flight | null; onDon
     const dep = splitLocal(existing?.depart_local ?? null);
     const arr = splitLocal(existing?.arrive_local ?? null);
     const t = (x: string | null) => (x && x.slice(0, 5) !== "00:00" ? x.slice(0, 5) : "");
+    const place = (name: string, lat?: number | null, lng?: number | null): Place => (lat != null && lng != null ? { name, lat, lng } : { name });
     return {
+      mode: (existing?.mode ?? "flight") as TransportMode,
       airline: existing?.airline ?? "",
       flight_number: existing?.flight_number ?? "",
       from_code: existing?.from_code ?? "",
       from_name: existing?.from_name ?? "",
       to_code: existing?.to_code ?? "",
       to_name: existing?.to_name ?? "",
+      from_place: place(existing?.from_name ?? "", existing?.from_lat, existing?.from_lng),
+      to_place: place(existing?.to_name ?? "", existing?.to_lat, existing?.to_lng),
       dep_day: dep.day ?? "",
       dep_time: t(dep.time),
       arr_day: arr.day ?? "",
@@ -406,7 +447,7 @@ function FlightForm({ flight: existing, onDone }: { flight: Flight | null; onDon
       seats: existing?.seats ?? "",
       status: (existing?.status ?? "booked") as BookingStatus,
       travelers: existing?.travelers ?? (me ? [me] : []),
-      cost: costValueFrom(existing?.cost ?? null, existing ?? null, "person") as CostValue,
+      cost: costValueFrom(existing?.cost ?? null, existing ?? null, perCar(existing?.mode) ? "group" : "person") as CostValue,
       notes: existing?.notes ?? "",
     };
   });
@@ -414,23 +455,37 @@ function FlightForm({ flight: existing, onDone }: { flight: Flight | null; onDon
   const people = rows.trip_members.map((m) => m.user_id);
   const groups = [...new Set(rows.flights.map((f) => f.option_group).filter(Boolean))] as string[];
   const considering = form.status === "idea";
+  const m = modeOf(form);
+  const near = trip?.lat != null && trip?.lng != null ? { lat: trip.lat, lng: trip.lng } : null;
+  const routeHint = routeText(m.airports ? form : { ...form, from_code: "", to_code: "", from_name: form.from_place.name ?? "", to_name: form.to_place.name ?? "" });
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
     const stamp = (d: string, t: string) => (d ? `${d}T${t || "00:00"}` : null);
+    // Airports come from the airport list; everything else is a place search with a pin.
+    const ends = m.airports
+      ? {
+          from_code: form.from_code.trim().toUpperCase(), from_name: form.from_name.trim(),
+          to_code: form.to_code.trim().toUpperCase(), to_name: form.to_name.trim(),
+          from_lat: null, from_lng: null, to_lat: null, to_lng: null,
+        }
+      : {
+          from_code: "", from_name: (form.from_place.name ?? "").trim(),
+          to_code: "", to_name: (form.to_place.name ?? "").trim(),
+          from_lat: form.from_place.lat ?? null, from_lng: form.from_place.lng ?? null,
+          to_lat: form.to_place.lat ?? null, to_lng: form.to_place.lng ?? null,
+        };
     const row = {
-      airline: form.airline.trim(),
-      flight_number: form.flight_number.trim().toUpperCase(),
-      from_code: form.from_code.trim().toUpperCase(),
-      from_name: form.from_name.trim(),
-      to_code: form.to_code.trim().toUpperCase(),
-      to_name: form.to_name.trim(),
+      mode: form.mode,
+      airline: m.carrier ? form.airline.trim() : "",
+      flight_number: m.number ? (m.airports ? form.flight_number.trim().toUpperCase() : form.flight_number.trim()) : "",
+      ...ends,
       depart_local: stamp(form.dep_day, form.dep_time),
       arrive_local: stamp(form.arr_day, form.arr_time),
       date_flex: considering ? form.date_flex : 0,
       option_group: form.option_group.trim(),
-      confirmation: form.confirmation.trim().toUpperCase(),
-      seats: form.seats.trim(),
+      confirmation: m.confirmation ? form.confirmation.trim().toUpperCase() : "",
+      seats: m.seats ? form.seats.trim() : "",
       status: form.status,
       travelers: form.travelers,
       ...costColumns(form.cost),
@@ -440,14 +495,46 @@ function FlightForm({ flight: existing, onDone }: { flight: Flight | null; onDon
     if (ok) onDone();
   }
 
+  // Switching between airports and places carries the names across.
+  const pickMode = (next: TransportMode) =>
+    setForm((f) => {
+      const was = modeOf(f).airports;
+      const now = MODES_AIR.has(next);
+      // Cars and rides are priced for the whole group; tickets per person (until a price is typed).
+      if (!f.cost.price) f = { ...f, cost: { ...f.cost, cost_unit: perCar(next) ? "group" : "person" } };
+      if (was === now) return { ...f, mode: next };
+      return now
+        ? { ...f, mode: next, from_name: f.from_place.name ?? "", to_name: f.to_place.name ?? "", from_code: "", to_code: "" }
+        : { ...f, mode: next, from_place: { name: f.from_name || f.from_code }, to_place: { name: f.to_name || f.to_code } };
+    });
+
   return (
     <form id="flight-form" className="form-grid" onSubmit={save}>
-      <Field label="Status" full>
-        <Segmented<BookingStatus> value={form.status} onChange={(v) => set("status", v)} options={[{ value: "idea", label: "Considering" }, { value: "booked", label: "Booked" }, { value: "cancelled", label: "Not chosen" }]} />
+      <Field label="How are you getting there?" full>
+        <div className="mode-picker" role="radiogroup" aria-label="Type of travel">
+          {MODE_LIST.map((x) => (
+            <button key={x.id} type="button" role="radio" aria-checked={form.mode === x.id} className={form.mode === x.id ? "on" : undefined} onClick={() => pickMode(x.id)}>
+              <ModeIcon mode={x.id} size={18} />
+              {x.label}
+            </button>
+          ))}
+        </div>
       </Field>
-      <Field label="From"><AirportInput label="From airport" code={form.from_code} name={form.from_name} onChange={(c, n) => setForm((f) => ({ ...f, from_code: c, from_name: n }))} placeholder="LAX or Los Angeles" /></Field>
-      <Field label="To"><AirportInput label="To airport" code={form.to_code} name={form.to_name} onChange={(c, n) => setForm((f) => ({ ...f, to_code: c, to_name: n }))} placeholder="BOS or Boston" /></Field>
-      <Field label={considering ? "Departs around" : "Departs"}><input className="input" type="date" value={form.dep_day} onChange={(e) => set("dep_day", e.target.value)} /></Field>
+      <Field label="Status" full>
+        <Segmented<BookingStatus> value={form.status} onChange={(v) => set("status", v)} options={[{ value: "idea", label: "Considering" }, { value: "booked", label: m.confirmation ? "Booked" : "Planned" }, { value: "cancelled", label: "Not chosen" }]} />
+      </Field>
+      {m.airports ? (
+        <>
+          <Field label={m.from}><AirportInput label="From airport" code={form.from_code} name={form.from_name} onChange={(c, n) => setForm((f) => ({ ...f, from_code: c, from_name: n }))} placeholder={m.fromPlaceholder} /></Field>
+          <Field label={m.to}><AirportInput label="To airport" code={form.to_code} name={form.to_name} onChange={(c, n) => setForm((f) => ({ ...f, to_code: c, to_name: n }))} placeholder={m.toPlaceholder} /></Field>
+        </>
+      ) : (
+        <>
+          <Field label={m.from}><PlaceSearch key={`from-${form.mode}`} value={form.from_place} onChange={(p) => set("from_place", p)} near={near} placeholder={m.fromPlaceholder} /></Field>
+          <Field label={m.to}><PlaceSearch key={`to-${form.mode}`} value={form.to_place} onChange={(p) => set("to_place", p)} near={near} placeholder={m.toPlaceholder} /></Field>
+        </>
+      )}
+      <Field label={considering ? `${m.depart} around` : m.depart}><input className="input" type="date" value={form.dep_day} onChange={(e) => set("dep_day", e.target.value)} /></Field>
       {considering ? (
         <Field label="How sure is the date?">
           <select className="input" value={form.date_flex} onChange={(e) => set("date_flex", Number(e.target.value))}>
@@ -455,28 +542,32 @@ function FlightForm({ flight: existing, onDone }: { flight: Flight | null; onDon
           </select>
         </Field>
       ) : (
-        <Field label="Departure time (local)"><input className="input" type="time" value={form.dep_time} onChange={(e) => set("dep_time", e.target.value)} /></Field>
+        <Field label="Time (local)"><input className="input" type="time" value={form.dep_time} onChange={(e) => set("dep_time", e.target.value)} /></Field>
       )}
-      {considering && <Field label="Departure time (if you know it)"><input className="input" type="time" value={form.dep_time} onChange={(e) => set("dep_time", e.target.value)} /></Field>}
-      <Field label="Arrives"><input className="input" type="date" min={form.dep_day || undefined} value={form.arr_day} onChange={(e) => set("arr_day", e.target.value)} /></Field>
-      <Field label="Arrival time (local)"><input className="input" type="time" value={form.arr_time} onChange={(e) => set("arr_time", e.target.value)} /></Field>
-      <Field label="Airline"><input className="input" value={form.airline} onChange={(e) => set("airline", e.target.value)} placeholder="JetBlue" /></Field>
-      <Field label="Flight number"><input className="input" value={form.flight_number} onChange={(e) => set("flight_number", e.target.value)} placeholder="B6 1234" /></Field>
-      {!considering && (
+      {considering && <Field label="Time (if you know it)"><input className="input" type="time" value={form.dep_time} onChange={(e) => set("dep_time", e.target.value)} /></Field>}
+      <Field label={m.arrive}><input className="input" type="date" min={form.dep_day || undefined} value={form.arr_day} onChange={(e) => set("arr_day", e.target.value)} /></Field>
+      <Field label="Time (local)"><input className="input" type="time" value={form.arr_time} onChange={(e) => set("arr_time", e.target.value)} /></Field>
+      {m.carrier && <Field label={m.carrier}><input className="input" value={form.airline} onChange={(e) => set("airline", e.target.value)} placeholder={m.carrierPlaceholder} /></Field>}
+      {m.number && <Field label={m.number}><input className="input" value={form.flight_number} onChange={(e) => set("flight_number", e.target.value)} placeholder={m.numberPlaceholder} /></Field>}
+      {!considering && (m.confirmation || m.seats) && (
         <>
-          <Field label="Confirmation code"><input className="input" value={form.confirmation} onChange={(e) => set("confirmation", e.target.value)} placeholder="ABC123" /></Field>
-          <Field label="Seats"><input className="input" value={form.seats} onChange={(e) => set("seats", e.target.value)} placeholder="14A, 14B" /></Field>
+          {m.confirmation && <Field label="Confirmation code"><input className="input" value={form.confirmation} onChange={(e) => set("confirmation", e.target.value)} placeholder="ABC123" /></Field>}
+          {m.seats && <Field label={m.seats}><input className="input" value={form.seats} onChange={(e) => set("seats", e.target.value)} placeholder={m.seatsPlaceholder} /></Field>}
         </>
       )}
-      <Field label="Compare with" hint={`Options with the same name are compared, and only the cheapest counts toward the budget. Leave empty to compare by route${form.from_code && form.to_code ? ` (${form.from_code} → ${form.to_code})` : ""}.`} full>
-        <input className="input" list="flight-groups" value={form.option_group} onChange={(e) => set("option_group", e.target.value)} placeholder="e.g. Outbound, Return, Lizza's flight" maxLength={80} />
+      <Field label="Compare with" hint={`Options with the same name are compared, and only the cheapest counts toward the budget. Leave empty to compare by route${routeHint && !routeHint.startsWith("at ") ? ` (${routeHint})` : ""}.`} full>
+        <input className="input" list="flight-groups" value={form.option_group} onChange={(e) => set("option_group", e.target.value)} placeholder="e.g. Getting there, Airport to hotel, Lizza's ride" maxLength={80} />
         <datalist id="flight-groups">{groups.map((g) => <option key={g} value={g} />)}</datalist>
       </Field>
-      <Field label="Who's on this flight" full>
+      <Field label={m.who} full>
         <PersonPicker people={people} value={form.travelers} onChange={(v) => set("travelers", v)} nameOf={nameOf} colorOf={colorOf} />
       </Field>
-      <CostEditor value={form.cost} onChange={(v) => set("cost", v)} participants={participantsForFlight(form, goingIds)} currency={trip?.currency ?? "USD"} householdOf={householdOf} label={considering ? "Rough price" : "Ticket price"} />
-      <Field label="Notes" full><textarea className="input textarea" value={form.notes} onChange={(e) => set("notes", e.target.value)} placeholder="Baggage, terminal, layover…" /></Field>
+      <CostEditor value={form.cost} onChange={(v) => set("cost", v)} participants={participantsForFlight(form, goingIds)} currency={trip?.currency ?? "USD"} householdOf={householdOf} label={considering ? "Rough price" : m.price} />
+      <Field label="Notes" full><textarea className="input textarea" value={form.notes} onChange={(e) => set("notes", e.target.value)} placeholder={m.notesPlaceholder} /></Field>
     </form>
   );
 }
+
+const perCar = (mode?: string | null) => mode === "rental" || mode === "drive" || mode === "rideshare";
+
+const MODES_AIR = new Set<TransportMode>(MODE_LIST.filter((x) => x.airports).map((x) => x.id));

@@ -12,6 +12,7 @@ import { itemsForDay } from "./Itinerary";
 import { mapEntries } from "@/lib/fields";
 import { useTravel } from "../travel/useTravel";
 import { stayForDay } from "@/lib/travel";
+import { modeOf, transportTitle } from "@/lib/transport";
 
 const STYLE = "https://tiles.openfreemap.org/styles/liberty";
 
@@ -81,13 +82,30 @@ export function MapSection({ compact = false, height }: { compact?: boolean; hei
       }
     }
     if (layers.stay) {
-      // Airports you fly into or out of.
-      const codes = new Set(rows.flights.filter((f) => f.status !== "cancelled").flatMap((f) => [f.from_code, f.to_code]).map((c) => c?.trim().toUpperCase()).filter(Boolean));
-      for (const c of codes) {
-        const a = travel.airport(c);
-        if (!a) continue;
-        if (tripLat != null && tripLng != null && Math.abs(a.lat - tripLat) + Math.abs(a.lng - tripLng) > 6) continue; // skip home airports far away
-        out.push({ id: `a${c}`, lat: a.lat, lng: a.lng, emoji: "✈️", color: "#3D5A80", title: `${a.code} · ${a.city}`, sub: a.name, layer: "airport" });
+      // Airports, stations, ports and pick-up spots you travel through.
+      const far = (p: { lat: number; lng: number }) => tripLat != null && tripLng != null && Math.abs(p.lat - tripLat) + Math.abs(p.lng - tripLng) > 6; // skip home far away
+      const seen = new Set<string>();
+      for (const f of rows.flights) {
+        if (f.status === "cancelled") continue;
+        const m = modeOf(f);
+        for (const side of ["from", "to"] as const) {
+          const code = (side === "from" ? f.from_code : f.to_code)?.trim().toUpperCase();
+          if (m.airports && code) {
+            const a = travel.airport(code);
+            if (!a || far(a) || seen.has(`a${code}`)) continue;
+            seen.add(`a${code}`);
+            out.push({ id: `a${code}`, lat: a.lat, lng: a.lng, emoji: "✈️", color: "#3D5A80", title: `${a.code} · ${a.city}`, sub: a.name, layer: "airport" });
+            continue;
+          }
+          const lat = side === "from" ? f.from_lat : f.to_lat;
+          const lng = side === "from" ? f.from_lng : f.to_lng;
+          const name = side === "from" ? f.from_name : f.to_name;
+          if (lat == null || lng == null) continue;
+          const id = `t${lat.toFixed(4)},${lng.toFixed(4)}`;
+          if (far({ lat, lng }) || seen.has(id)) continue;
+          seen.add(id);
+          out.push({ id, lat, lng, emoji: m.emoji, color: "#3D5A80", title: name.split(",")[0] || m.label, sub: transportTitle(f), layer: "airport" });
+        }
       }
     }
     if (layers.list) {

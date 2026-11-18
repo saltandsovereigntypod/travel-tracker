@@ -17,6 +17,7 @@ import { expenseShares, groupBalances, netBalances, settleUp } from "@/lib/balan
 import type { Expense, LinkedType, SplitMode } from "@/lib/types";
 import { homeAmount, useMoney, type CostedThing } from "./money";
 import { PayStatus } from "./Payments";
+import { transportTitle } from "@/lib/transport";
 
 export { homeAmount };
 
@@ -522,7 +523,7 @@ export function ExpenseModal({ expense, preset, onClose }: { expense: Expense | 
   const reading = !!live && (!editMode || !canEdit);
   const linkedTitle =
     form.linked_type === "itinerary" ? rows.itinerary_items.find((i) => i.id === form.linked_id)?.title :
-    form.linked_type === "flight" ? (() => { const f = rows.flights.find((x) => x.id === form.linked_id); return f ? `${f.from_code}→${f.to_code} flight` : undefined; })() :
+    form.linked_type === "flight" ? (() => { const f = rows.flights.find((x) => x.id === form.linked_id); return f ? transportTitle(f) : undefined; })() :
     form.linked_type === "stay" ? rows.stays.find((s) => s.id === form.linked_id)?.name :
     form.linked_type === "list_item" ? rows.list_items.find((i) => i.id === form.linked_id)?.title : undefined;
 

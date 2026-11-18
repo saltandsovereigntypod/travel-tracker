@@ -7,7 +7,7 @@ import { useAuth } from "@/components/AuthProvider";
 const FEATURES = [
   { icon: Lightbulb, title: "Ideas board", text: "Everyone drops in things they want to do. Vote, comment, then move the winners onto the plan." },
   { icon: CalendarDays, title: "Day-by-day itinerary", text: "Drag plans between days. Flights and check-ins show up on the right day automatically." },
-  { icon: Plane, title: "Flights", text: "Boarding-pass cards with times, confirmation codes and who's on which flight." },
+  { icon: Plane, title: "Getting around", text: "Flights, trains, buses, ferries, rental cars and rides, with times, confirmation codes and who's on which." },
   { icon: BedDouble, title: "Stays", text: "Hotels, hostels and rentals with nights, addresses and check-in times." },
   { icon: Wallet, title: "Budget & splitting", text: "Log costs in any currency. Driftbook works out who owes whom." },
   { icon: Luggage, title: "Packing", text: "A shared list for the group, plus a private list for each person." },

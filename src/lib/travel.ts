@@ -4,6 +4,7 @@
 import { addDays } from "./format";
 import { centroid, distanceKm, hasCoords, spread, type LatLng } from "./geo";
 import type { Flight, Stay } from "./types";
+import { MODE_LIST } from "./transport";
 
 // ---- Options you're comparing --------------------------------------------
 
@@ -281,8 +282,10 @@ export type FlightLeg = "out" | "return" | "during";
  * is their flight out, their last is their flight home, anything else is during the trip.
  * Flights with nobody on them use the whole group's order.
  */
-export function flightLegs(flights: Pick<Flight, "id" | "status" | "depart_local" | "travelers">[]): Record<string, FlightLeg> {
-  const live = flights.filter((f) => f.status !== "cancelled").sort((a, b) => (a.depart_local ?? "9999").localeCompare(b.depart_local ?? "9999"));
+export function flightLegs(flights: (Pick<Flight, "id" | "status" | "depart_local" | "travelers"> & { mode?: string | null })[]): Record<string, FlightLeg> {
+  // Getting-around trips (rental cars, rideshares) never count as the way there or back.
+  const local = (f: { mode?: string | null }) => f.mode === "rental" || f.mode === "rideshare";
+  const live = flights.filter((f) => f.status !== "cancelled" && !local(f)).sort((a, b) => (a.depart_local ?? "9999").localeCompare(b.depart_local ?? "9999"));
   const legFor = (seq: { id: string }[], id: string): FlightLeg => {
     const i = seq.findIndex((f) => f.id === id);
     if (i === 0) return "out";
@@ -293,7 +296,7 @@ export function flightLegs(flights: Pick<Flight, "id" | "status" | "depart_local
   for (const f of flights) {
     const who = f.travelers?.[0];
     const seq = who ? live.filter((x) => x.travelers?.includes(who)) : live;
-    out[f.id] = f.status === "cancelled" ? "during" : legFor(seq, f.id);
+    out[f.id] = f.status === "cancelled" || local(f) ? "during" : legFor(seq, f.id);
   }
   return out;
 }
@@ -304,14 +307,14 @@ export interface FlightGroup<F> {
   flights: F[];
 }
 
-export function groupFlights<F extends Pick<Flight, "id" | "status" | "depart_local" | "travelers">>(
+export function groupFlights<F extends Pick<Flight, "id" | "status" | "depart_local" | "travelers"> & { mode?: string | null }>(
   flights: F[],
   by: string,
   nameOf: (id: string) => string,
 ): FlightGroup<F>[] {
   if (by === "direction") {
     const legs = flightLegs(flights);
-    const order: [FlightLeg, string][] = [["out", "Flights out"], ["during", "During the trip"], ["return", "Flights home"]];
+    const order: [FlightLeg, string][] = [["out", "Getting there"], ["during", "During the trip"], ["return", "Getting home"]];
     return order.map(([k, title]) => ({ key: k, title, flights: flights.filter((f) => legs[f.id] === k) })).filter((g) => g.flights.length);
   }
   if (by === "person") {
@@ -320,6 +323,10 @@ export function groupFlights<F extends Pick<Flight, "id" | "status" | "depart_lo
     const nobody = flights.filter((f) => !f.travelers.length);
     if (nobody.length) groups.push({ key: "~", title: "Nobody added yet", flights: nobody });
     return groups.sort((a, b) => (a.key === "~" ? 1 : b.key === "~" ? -1 : a.title.localeCompare(b.title)));
+  }
+  if (by === "mode") {
+    const modes = [...new Set(flights.map((f) => f.mode || "flight"))];
+    return MODE_LIST.filter((m) => modes.includes(m.id)).map((m) => ({ key: m.id, title: `${m.emoji} ${m.label}`, flights: flights.filter((f) => (f.mode || "flight") === m.id) }));
   }
   return [{ key: "all", title: "", flights }];
 }

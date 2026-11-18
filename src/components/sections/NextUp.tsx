@@ -1,13 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { Plane, BedDouble, CalendarClock, AlertTriangle } from "lucide-react";
+import { BedDouble, CalendarClock, AlertTriangle } from "lucide-react";
 import { useTrip } from "../TripProvider";
 import { EmptyState } from "../ui/Fields";
 import { useFixedEvents } from "./Itinerary";
 import { categoryOf } from "@/lib/categories";
 import { cadenceGaps } from "@/lib/fields";
 import { daysBetween, formatDay, formatTime, todayString } from "@/lib/format";
+import { ModeIcon } from "../travel/ModeIcon";
 
 interface Up {
   key: string;
@@ -45,7 +46,7 @@ export function NextUpSection({ limit = 6 }: { limit?: number }) {
             title: e.title,
             sub: e.sub,
             href: e.href,
-            icon: e.kind === "flight" ? <Plane size={15} /> : e.kind === "stay" ? <BedDouble size={15} /> : <span aria-hidden>{e.icon}</span>,
+            icon: e.kind === "flight" ? <ModeIcon mode={e.mode} size={15} /> : e.kind === "stay" ? <BedDouble size={15} /> : <span aria-hidden>{e.icon}</span>,
           })),
       ),
     ...rows.itinerary_items
