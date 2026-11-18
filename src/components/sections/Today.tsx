@@ -12,6 +12,7 @@ import { itemsForDay, useFixedEvents } from "./Itinerary";
 import { useIdeaScores } from "./Ideas";
 import { modeOf, routeText } from "@/lib/transport";
 import { ModeIcon } from "../travel/ModeIcon";
+import { finalOnly } from "@/lib/drafts";
 
 export function Countdown({ big = false }: { big?: boolean }) {
   const { trip, noun, voice, rows } = useTrip();
@@ -22,7 +23,7 @@ export function Countdown({ big = false }: { big?: boolean }) {
       ...calendarEntries({ lists: rows.lists, items: rows.list_items })
         .filter((c) => c.day >= today && !isDone(c.item, c.list))
         .map((c) => ({ day: c.day, title: c.item.title || "Untitled", sub: c.field.name })),
-      ...rows.itinerary_items.filter((i) => i.day && i.day >= today).map((i) => ({ day: i.day!, title: i.title, sub: "" })),
+      ...finalOnly(rows.itinerary_items).filter((i) => i.day && i.day >= today).map((i) => ({ day: i.day!, title: i.title, sub: "" })),
     ].sort((a, b) => a.day.localeCompare(b.day))[0];
     if (!next) {
       return (
@@ -87,10 +88,11 @@ export function TodaySection({ compact = false }: { compact?: boolean }) {
   const days = tripDays(trip?.start_date ?? null, trip?.end_date ?? null);
 
   const focusDay = c.phase === "during" ? today : days[0] ?? null;
-  const items = focusDay ? itemsForDay(rows.itinerary_items, focusDay) : [];
+  // Today shows what's locked in; pencilled-in plans are still being decided.
+  const items = focusDay ? itemsForDay(finalOnly(rows.itinerary_items), focusDay) : [];
   const events = focusDay ? fixed[focusDay] ?? [] : [];
   const tomorrow = c.phase === "during" ? addDays(today, 1) : null;
-  const tomorrowItems = tomorrow ? itemsForDay(rows.itinerary_items, tomorrow) : [];
+  const tomorrowItems = tomorrow ? itemsForDay(finalOnly(rows.itinerary_items), tomorrow) : [];
 
   const unbooked = !hasModule("flights") && !hasModule("stays") ? [] : [
     ...rows.stays.filter((s) => s.status === "idea").map((s) => `Book a stay: ${s.name}`),
@@ -101,6 +103,7 @@ export function TodaySection({ compact = false }: { compact?: boolean }) {
     .sort((a, b) => (scores[b.id]?.score ?? 0) - (scores[a.id]?.score ?? 0))
     .slice(0, 3);
   const unscheduled = itemsForDay(rows.itinerary_items, null).length;
+  const pencilled = rows.itinerary_items.filter((i) => i.draft && i.day).length;
 
   return (
     <div className="stack">
@@ -162,7 +165,8 @@ export function TodaySection({ compact = false }: { compact?: boolean }) {
             </div>
           )}
           {unscheduled > 0 && <p className="small">{unscheduled} plan{unscheduled === 1 ? "" : "s"} waiting for a day.</p>}
-          {!unbooked.length && !topIdeas.length && !unscheduled && <p className="small muted">All caught up. 🎉</p>}
+          {pencilled > 0 && <p className="small">✏️ {pencilled} plan{pencilled === 1 ? "" : "s"} pencilled in. Vote on {pencilled === 1 ? "it" : "them"} so the itinerary can be locked in.</p>}
+          {!unbooked.length && !topIdeas.length && !unscheduled && !pencilled && <p className="small muted">All caught up. 🎉</p>}
           {hasModule("itinerary") && <Link href={`/trips/${tripId}/itinerary`} className="btn btn-sm btn-ghost" style={{ alignSelf: "flex-start" }}>Open calendar →</Link>}
         </div>
       )}

@@ -50,7 +50,7 @@ export function NextUpSection({ limit = 6 }: { limit?: number }) {
           })),
       ),
     ...rows.itinerary_items
-      .filter((i) => i.day && i.day >= today)
+      .filter((i) => i.day && i.day >= today && !i.draft)
       .map((i) => ({ key: i.id, day: i.day!, time: i.start_time, title: i.title, icon: <span aria-hidden>{categoryOf(i.category).emoji}</span>, href: `/trips/${tripId}/itinerary` })),
   ]
     .sort((a, b) => a.day.localeCompare(b.day) || (a.time ?? "99").localeCompare(b.time ?? "99"))

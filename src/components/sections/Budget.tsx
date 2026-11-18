@@ -184,7 +184,7 @@ export function BudgetSection({ compact = false }: { compact?: boolean }) {
             <small>Not booked yet</small>
             <strong>≈ {formatMoney(travel.estimated, cur)}</strong>
             <span className="tiny muted">
-              cheapest flight &amp; stay options
+              {money.pencilledTotal > 0 ? "cheapest options & pencilled-in plans" : "cheapest flight & stay options"}
               {travel.remainingIfBooked != null && <> · {travel.remainingIfBooked >= 0 ? `${formatMoney(travel.remainingIfBooked, cur)} left after` : `${formatMoney(-travel.remainingIfBooked, cur)} over after`}</>}
             </span>
           </div>

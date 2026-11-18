@@ -21,6 +21,7 @@ import { categoryOf } from "@/lib/categories";
 import { formatDay, formatMoney, hostname, normalizeUrl, tripDays } from "@/lib/format";
 import type { Idea, IdeaStatus, ItineraryItem, Place } from "@/lib/types";
 import { Check } from "lucide-react";
+import { usePencil } from "./pencil";
 
 type Filter = "all" | "tovote" | IdeaStatus;
 
@@ -503,6 +504,7 @@ function IdeaForm({ existing, onDone }: { existing: Idea | null; onDone: () => v
 /** Turn an idea into an itinerary plan (shared by the Schedule button and drag-to-day). */
 export function useScheduleIdea() {
   const { insert, update, rows } = useTrip();
+  const [pencil] = usePencil();
   return async (idea: Idea, day: string | null, time: string | null, participants: string[] = []) => {
     const start = time ? (time.length === 5 ? `${time}:00` : time) : null;
     const item = await insert("itinerary_items", {
@@ -517,6 +519,8 @@ export function useScheduleIdea() {
       idea_id: idea.id,
       day,
       start_time: start,
+      // In pencil mode it lands as a draft for everyone to weigh in on.
+      draft: pencil && !!day,
       sort_order: orderForTime(itemsForDay(rows.itinerary_items, day), start),
     });
     if (item) await update("ideas", idea.id, { status: "planned" });
