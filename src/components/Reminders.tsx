@@ -38,7 +38,7 @@ async function dueSoon(userId: string): Promise<{ today: string[]; tomorrow: str
   const [lists, items, plans, pages] = await Promise.all([
     sb.from("lists").select("*").in("trip_id", ids),
     sb.from("list_items").select("*").in("trip_id", ids),
-    sb.from("itinerary_items").select("*").in("trip_id", ids).gte("day", today).lte("day", tomorrow),
+    sb.from("itinerary_items").select("*").in("trip_id", ids).eq("draft", false).gte("day", today).lte("day", tomorrow),
     sb.from("pages").select("id, trip_id, title, icon, blocks").in("trip_id", ids),
   ]);
   const out = { today: [] as string[], tomorrow: [] as string[] };

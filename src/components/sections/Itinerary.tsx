@@ -16,7 +16,11 @@ import { Avatar, EmptyState, Field, PersonPicker, PlaceSearch, Segmented } from 
 import { CostEditor, costColumns, costValueFrom, type CostValue } from "../ui/CostEditor";
 import { PaymentPanel, PayStatus } from "./Payments";
 import { ScheduleModal, useBackToIdeas, useIdeaScores, useScheduleIdea } from "./Ideas";
-import { Lightbulb, ThumbsUp } from "lucide-react";
+import { Lightbulb, ThumbsUp, ThumbsDown, Lock, LockOpen, PencilLine, AlertTriangle, History } from "lucide-react";
+import { usePencil } from "./pencil";
+import { useToast } from "../ui/Toast";
+import { draftsOn, finalOnly, hasMajority, likesToLock, summarizeDay, tallyPlan } from "@/lib/drafts";
+import { formatDistance } from "@/lib/geo";
 import type { Idea } from "@/lib/types";
 import { useMoney } from "./money";
 import { CommentThread, useCommentCount } from "./Comments";
@@ -118,7 +122,21 @@ export function useFixedEvents() {
 }
 
 export function ItinerarySection({ compact = false }: { compact?: boolean }) {
-  const { rows, trip, canEdit, update, tripId } = useTrip();
+  const { rows, trip, canEdit, update, tripId, myRole, canChangePlan, goingIds } = useTrip();
+  const toast = useToast();
+  const [pencil, setPencil] = usePencil();
+  const [showWhich, setShowWhich] = useState<"all" | "final">("all");
+  // Everyone in the space can suggest (pencil in); only editors lock in.
+  const canSuggest = !!myRole;
+  const drafts = draftsOn(rows.itinerary_items);
+  const shownItems = showWhich === "final" ? finalOnly(rows.itinerary_items) : rows.itinerary_items;
+
+  async function lockIn(list: ItineraryItem[], what: string) {
+    if (!list.length) return;
+    if (!confirm(`Lock in ${list.length} pencilled-in plan${list.length === 1 ? "" : "s"} ${what}? They'll show on Today, reminders and the share page.`)) return;
+    const results = await Promise.all(list.map((i) => update("itinerary_items", i.id, { draft: false })));
+    if (results.every(Boolean)) toast.success(`Locked in ${list.length} plan${list.length === 1 ? "" : "s"}.`);
+  }
   const planChoice = useCardChoice("plans");
   const showPlanPart = useCardParts("plans");
   const fixed = useFixedEvents();
@@ -147,13 +165,13 @@ export function ItinerarySection({ compact = false }: { compact?: boolean }) {
   const outside = rolling && !showPast ? contentDays.filter((d) => d >= today0) : contentDays;
   // Trip-style spaces show every day in their range; any other dated plans slot in chronologically.
   const allDays = [...days, ...outside].sort();
-  const unscheduled = itemsForDay(rows.itinerary_items, null);
+  const unscheduled = itemsForDay(shownItems, null);
   const today = todayString();
 
   // Compact block: today (if during trip) or the first days with plans.
   const visibleDays = compact
     ? (() => {
-        const withStuff = allDays.filter((d) => itemsForDay(rows.itinerary_items, d).length || fixed[d]?.length);
+        const withStuff = allDays.filter((d) => itemsForDay(finalOnly(rows.itinerary_items), d).length || fixed[d]?.length);
         const fromToday = withStuff.filter((d) => d >= today);
         const pool = fromToday.length ? fromToday : withStuff;
         const n = planChoice("days");
@@ -183,7 +201,7 @@ export function ItinerarySection({ compact = false }: { compact?: boolean }) {
       return;
     }
     const item = rows.itinerary_items.find((i) => i.id === e.active.id);
-    if (!item || !overId) return;
+    if (!item || !overId || !canChangePlan(item)) return;
     if (overId.startsWith("day:")) {
       const raw = overId.slice(4);
       const day = raw === UNSCHEDULED ? null : raw;
@@ -227,10 +245,34 @@ export function ItinerarySection({ compact = false }: { compact?: boolean }) {
               </button>
             )}
             <CardOptions kind="plans" title="Plan cards" />
-            {canEdit && (
+            {canSuggest && (
               <button className="btn btn-primary" onClick={() => setEditing({ day: null })}>
-                <Plus size={16} /> {voice.calendar.add}
+                {pencil ? <PencilLine size={16} /> : <Plus size={16} />} {pencil ? "Pencil in" : voice.calendar.add}
               </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {!compact && canSuggest && (
+        <div className={clsx("card draft-bar", drafts.length > 0 && "has-drafts")}>
+          <div className="grow" style={{ minWidth: 0 }}>
+            <strong className="row" style={{ gap: 6 }}><PencilLine size={16} /> {drafts.length ? `${drafts.length} plan${drafts.length === 1 ? "" : "s"} pencilled in` : "Tentative plans"}</strong>
+            <span className="tiny muted" style={{ display: "block" }}>
+              {canEdit
+                ? `Pencilled-in plans are drafts: everyone can vote, comment and move them around. Lock them in yourself${goingIds.length >= 2 ? ", or they lock in on their own once most people going 👍 them" : ""}.`
+                : `What you add is pencilled in for everyone to vote on and comment. You can move or delete your own; ${goingIds.length >= 2 ? "plans lock in once most people going 👍 them, or an organizer locks them in" : "an organizer locks them in"}.`}
+            </span>
+          </div>
+          <div className="row wrap" style={{ gap: 8 }}>
+            {canEdit && (
+              <label className="row small" style={{ gap: 6 }}>
+                <input type="checkbox" className="switch" checked={pencil} onChange={(e) => setPencil(e.target.checked)} /> Pencil in new plans
+              </label>
+            )}
+            {drafts.length > 0 && <Segmented size="sm" value={showWhich} onChange={setShowWhich} options={[{ value: "all", label: "Everything" }, { value: "final", label: "Locked in only" }]} />}
+            {canEdit && drafts.length > 0 && (
+              <button className="btn btn-sm btn-primary" onClick={() => void lockIn(drafts, "across the whole trip")}><Lock size={14} /> Lock in all</button>
             )}
           </div>
         </div>
@@ -278,12 +320,13 @@ export function ItinerarySection({ compact = false }: { compact?: boolean }) {
                 key={d}
                 day={d}
                 index={days.indexOf(d)}
-                items={itemsForDay(rows.itinerary_items, d)}
+                items={itemsForDay(shownItems, d)}
                 fixed={showPlanPart("fixed") ? fixed[d] ?? [] : []}
                 isToday={d === today}
                 compact={compact}
                 onOpen={setEditing}
                 onAdd={() => setEditing({ day: d })}
+                onLock={(list) => void lockIn(list, `on ${formatDay(d, { weekday: "long" })}`)}
               />
             ))}
             {(!compact || !visibleDays.length) && (unscheduled.length > 0 || !compact) && (
@@ -310,7 +353,7 @@ export function ItinerarySection({ compact = false }: { compact?: boolean }) {
 }
 
 function DayColumn({
-  day, index, items, fixed, isToday, compact, onOpen, onAdd,
+  day, index, items, fixed, isToday, compact, onOpen, onAdd, onLock,
 }: {
   day: string | null;
   index: number;
@@ -320,8 +363,14 @@ function DayColumn({
   compact?: boolean;
   onOpen: (i: ItineraryItem) => void;
   onAdd: () => void;
+  onLock?: (drafts: ItineraryItem[]) => void;
 }) {
-  const { canEdit, insert, voice, trip } = useTrip();
+  const { canEdit, insert, voice, trip, myRole, canChangePlan } = useTrip();
+  const [pencil] = usePencil();
+  const money = useMoney();
+  const canSuggest = !!myRole;
+  const dayDrafts = draftsOn(items);
+  const sum = day && items.length ? summarizeDay(items, (i) => money.byKey[`itinerary:${i.id}`]?.total ?? null) : null;
   const rolling = voice.ongoing && !trip?.start_date;
   const { setNodeRef, isOver } = useDroppable({ id: `day:${day ?? UNSCHEDULED}` });
   const [quick, setQuick] = useState("");
@@ -331,7 +380,7 @@ function DayColumn({
     const title = quick.trim();
     if (!title) return;
     setQuick("");
-    await insert("itinerary_items", { title, day, sort_order: items.length ? items[items.length - 1].sort_order + 1 : 0 });
+    await insert("itinerary_items", { title, day, draft: pencil && !!day, sort_order: items.length ? items[items.length - 1].sort_order + 1 : 0 });
   }
 
   const merged: ({ fixed: FixedEvent } | { item: ItineraryItem })[] = [
@@ -346,8 +395,9 @@ function DayColumn({
         <div>
           <div className="day-num">{day ? (rolling ? relativeDay(day) : index >= 0 ? `Day ${index + 1}` : parseMonth(day)) : voice.calendar.unscheduledKicker}{isToday && !rolling && " · Today"}</div>
           <h3>{day ? formatDay(day, { weekday: "long" }) : voice.calendar.unscheduledTitle}</h3>
+          {dayDrafts.length > 0 && <span className="chip chip-2 draft-chip"><PencilLine size={11} /> {dayDrafts.length} pencilled in</span>}
         </div>
-        {canEdit && !compact && (
+        {canSuggest && !compact && (
           <button className="icon-btn" onClick={onAdd} aria-label={`Add to this day`}>
             <Plus size={18} />
           </button>
@@ -358,14 +408,26 @@ function DayColumn({
           "fixed" in m ? (
             <FixedRow key={m.fixed.key} e={m.fixed} />
           ) : (
-            <ItemRow key={m.item.id} item={m.item} onOpen={() => onOpen(m.item)} draggable={canEdit} />
+            <ItemRow key={m.item.id} item={m.item} onOpen={() => onOpen(m.item)} draggable={canChangePlan(m.item)} />
           ),
         )}
         {!merged.length && <p className="tiny muted" style={{ padding: "0.6rem" }}>{canEdit ? voice.calendar.drop : "Nothing yet"}</p>}
       </div>
-      {canEdit && !compact && (
+      {sum && !compact && (sum.plans > 1 || sum.minutes > 0 || sum.cost > 0) && (
+        <div className="day-summary tiny muted">
+          <span>{sum.plans} plan{sum.plans === 1 ? "" : "s"}</span>
+          {sum.minutes > 0 && <span>· {sum.minutes >= 60 ? `${Math.round((sum.minutes / 60) * 10) / 10} hrs` : `${sum.minutes} min`}</span>}
+          {sum.cost > 0 && <span>· ~{formatMoney(sum.cost, trip?.currency)}</span>}
+          {sum.km >= 0.5 && <span>· {formatDistance(sum.km)} between stops</span>}
+          {sum.clashes > 0 && <span className="day-clash"><AlertTriangle size={11} /> {sum.clashes} overlap{sum.clashes === 1 ? "" : "s"}</span>}
+          {canEdit && dayDrafts.length > 0 && onLock && (
+            <button className="btn btn-sm" style={{ marginLeft: "auto" }} onClick={() => onLock(dayDrafts)}><Lock size={13} /> Lock in {formatDay(day!, { weekday: "long", month: undefined, day: undefined })}</button>
+          )}
+        </div>
+      )}
+      {canSuggest && !compact && (
         <form className="quick-add" onSubmit={quickAdd}>
-          <input className="input" value={quick} onChange={(e) => setQuick(e.target.value)} placeholder={day ? "Quick add to this day…" : "Quick add…"} />
+          <input className="input" value={quick} onChange={(e) => setQuick(e.target.value)} placeholder={day ? (pencil ? "Pencil something in…" : "Quick add to this day…") : "Quick add…"} />
           <button className="btn btn-sm" disabled={!quick.trim()} aria-label="Add">
             <Plus size={14} />
           </button>
@@ -393,7 +455,9 @@ function ItemRow({ item, onOpen, draggable, overlay }: { item: ItineraryItem; on
       }}
       {...drag.attributes}
       {...drag.listeners}
-      className={clsx("itin-item", drag.isDragging && "dragging")}
+      // Plans you can't move are still openable (and votable), so don't announce them as disabled.
+      aria-disabled={undefined}
+      className={clsx("itin-item", drag.isDragging && "dragging", item.draft && "is-draft")}
       style={{ ...(drop.isOver && !drag.isDragging ? { boxShadow: "0 -3px 0 var(--accent)" } : {}), ...(overlay ? { boxShadow: "var(--shadow-lg)" } : {}), ...(!draggable ? { cursor: "pointer" } : {}) }}
       onClick={onOpen}
       role="button"
@@ -406,7 +470,7 @@ function ItemRow({ item, onOpen, draggable, overlay }: { item: ItineraryItem; on
       </span>
       <span className="cat-dot">{cat.emoji}</span>
       <div className="grow">
-        <strong style={{ display: "block" }}>{item.title}</strong>
+        <strong style={{ display: "block" }}>{item.title}{item.draft && <span className="draft-tag">Draft</span>}</strong>
         <div className="row tiny muted wrap" style={{ gap: "0.5rem" }}>
           {show("place") && item.location?.name && <span className="row" style={{ gap: 2 }}><MapPin size={11} />{item.location.name}</span>}
           {show("distance") && fromStay && <span className="row" style={{ gap: 2 }} title={`From ${fromStay.stay.name}`}>🏨 {fromStay.label.split(" · ")[0]}</span>}
@@ -417,6 +481,42 @@ function ItemRow({ item, onOpen, draggable, overlay }: { item: ItineraryItem; on
         </div>
         {show("about") && item.notes && <span className="tiny muted itin-notes">{item.notes}</span>}
       </div>
+      {item.draft && !overlay && <PlanVotes item={item} compact />}
+    </div>
+  );
+}
+
+/** 👍 / 👎 on a pencilled-in plan. Votes never start a drag or open the plan. */
+function PlanVotes({ item, compact }: { item: ItineraryItem; compact?: boolean }) {
+  const { rows, me, goingIds, votePlan, myRole, nameOf, colorOf } = useTrip();
+  const t = tallyPlan(rows.plan_votes, item.id, me, goingIds);
+  const need = likesToLock(t.upFromGoing, goingIds.length);
+  const stop = (e: React.SyntheticEvent) => e.stopPropagation();
+  const can = !!myRole;
+  const buttons = (
+    <div className="plan-votes" onClick={stop} onPointerDown={stop} onKeyDown={stop}>
+      <button type="button" className={clsx("vote-btn", t.mine === 1 && "on")} disabled={!can} aria-pressed={t.mine === 1} aria-label={`Like ${item.title}`} onClick={() => void votePlan(item.id, t.mine === 1 ? 0 : 1)}>
+        <ThumbsUp size={13} /> {t.up || ""}
+      </button>
+      <button type="button" className={clsx("vote-btn", t.mine === -1 && "on down")} disabled={!can} aria-pressed={t.mine === -1} aria-label={`Not keen on ${item.title}`} onClick={() => void votePlan(item.id, t.mine === -1 ? 0 : -1)}>
+        <ThumbsDown size={13} /> {t.down || ""}
+      </button>
+    </div>
+  );
+  if (compact) return buttons;
+  return (
+    <div className="stack" style={{ gap: 6 }}>
+      <div className="row wrap" style={{ gap: 10 }}>
+        {buttons}
+        {t.likers.length > 0 && (
+          <span className="row tiny muted" style={{ gap: 6 }}>
+            <span className="avatar-stack">{t.likers.map((id) => <Avatar key={id} name={nameOf(id)} color={colorOf(id)} size={20} />)}</span>
+            {t.likers.map((id) => nameOf(id).split(" ")[0]).join(", ")} {t.likers.length === 1 ? "likes" : "like"} this
+          </span>
+        )}
+      </div>
+      {need != null && need > 0 && <span className="tiny muted">{need} more 👍 from people going and it locks in on its own.</span>}
+      {need === 0 && hasMajority(t.upFromGoing, goingIds.length) && <span className="tiny muted">Most people going like this, so it&apos;s locking in.</span>}
     </div>
   );
 }
@@ -427,7 +527,8 @@ const blank = {
 };
 
 function ItemModal({ target, onClose }: { target: ItineraryItem | { day: string | null } | null; onClose: () => void }) {
-  const { trip, rows, insert, update, remove, canEdit, goingIds, nameOf, colorOf, householdOf, voice } = useTrip();
+  const { trip, rows, insert, update, remove, goingIds, nameOf, colorOf, householdOf, voice, canEdit: isEditor, canChangePlan, myRole } = useTrip();
+  const [pencil] = usePencil();
   const existing = target && "id" in target ? target : null;
   const days = tripDays(trip?.start_date ?? null, trip?.end_date ?? null);
   const [form, setForm] = useState(blank);
@@ -435,6 +536,9 @@ function ItemModal({ target, onClose }: { target: ItineraryItem | { day: string 
   const [loadedFor, setLoadedFor] = useState<unknown>(null);
   const [editMode, setEditMode] = useState(false);
   const live = existing ? rows.itinerary_items.find((i) => i.id === existing.id) ?? existing : null;
+  // Editors change anything; everyone else can add (pencilled in) and change what they pencilled in.
+  const canEdit = live ? canChangePlan(live) : !!myRole;
+  const [draft, setDraft] = useState(pencil);
   if (target !== loadedFor) {
     setLoadedFor(target);
     setPickDate(false);
@@ -454,6 +558,7 @@ function ItemModal({ target, onClose }: { target: ItineraryItem | { day: string 
       });
     } else if (target) {
       setForm({ ...blank, day: (target as { day: string | null }).day ?? "", participants: goingIds });
+      setDraft(pencil || !isEditor);
     }
   }
   const set = <K extends keyof typeof form>(k: K, v: (typeof form)[K]) => setForm((f) => ({ ...f, [k]: v }));
@@ -482,7 +587,7 @@ function ItemModal({ target, onClose }: { target: ItineraryItem | { day: string 
       const moved = existing.day !== day || existing.start_time !== start;
       ok = await update("itinerary_items", existing.id, moved ? { ...row, sort_order: orderForTime(dayItems, start, existing.id) } : row);
     } else {
-      ok = !!(await insert("itinerary_items", { ...row, sort_order: orderForTime(dayItems, start) }));
+      ok = !!(await insert("itinerary_items", { ...row, draft: draft || !isEditor, sort_order: orderForTime(dayItems, start) }));
     }
     if (!ok) return;
     // Back to reading after an edit; a new plan just closes.
@@ -497,7 +602,7 @@ function ItemModal({ target, onClose }: { target: ItineraryItem | { day: string 
     <Modal
       open={!!target}
       onClose={onClose}
-      title={live ? live.title : `Add ${voice.calendar.thing === "item" ? "something" : `a ${voice.calendar.thing}`}`}
+      title={live ? live.title : draft || !isEditor ? "Pencil something in" : `Add ${voice.calendar.thing === "item" ? "something" : `a ${voice.calendar.thing}`}`}
       variant="panel"
       actions={reading && canEdit ? <button className="btn btn-sm" onClick={() => setEditMode(true)}><Pencil size={14} /> Edit</button> : undefined}
       footer={
@@ -532,6 +637,18 @@ function ItemModal({ target, onClose }: { target: ItineraryItem | { day: string 
             <Field label="What" full>
               <input className="input" value={form.title} onChange={(e) => set("title", e.target.value)} placeholder={voice.calendar.titlePlaceholder} required maxLength={200} />
             </Field>
+            {!existing && (
+              <div className="field-full">
+                {isEditor ? (
+                  <label className="row small" style={{ gap: 8 }}>
+                    <input type="checkbox" className="switch" checked={draft} onChange={(e) => setDraft(e.target.checked)} />
+                    <span><strong>Pencil it in</strong> <span className="muted">· a draft everyone can vote on and move before it&apos;s locked in</span></span>
+                  </label>
+                ) : (
+                  <p className="tiny muted row" style={{ gap: 6 }}><PencilLine size={13} /> This is pencilled in for everyone to vote on. An organizer (or a majority 👍) locks it in.</p>
+                )}
+              </div>
+            )}
             <Field label="Day">
               {days.length && !pickDate ? (
                 <select
@@ -600,7 +717,9 @@ function PlanDetails({ item, onClose }: { item: ItineraryItem; onClose?: () => v
     <div className="detail">
       <div className="row wrap" style={{ gap: 6 }}>
         <span className="chip">{cat.emoji} {cat.label}</span>
+        {item.draft ? <span className="chip chip-2"><PencilLine size={12} /> Pencilled in</span> : item.locked_at ? <span className="chip chip-ok"><Lock size={12} /> Locked in</span> : null}
       </div>
+      <DraftPanel item={item} />
       <div className="detail-grid">
         <div><small>When</small>{item.day ? formatDay(item.day) : "Not scheduled yet"}{item.start_time && <> · {formatTime(item.start_time)}{item.end_time && `–${formatTime(item.end_time)}`}</>}</div>
         <div><small>Cost</small>{costed?.total != null ? formatMoney(costed.total, trip?.currency) : "—"}</div>
@@ -726,5 +845,54 @@ function FixedRow({ e }: { e: FixedEvent }) {
     <Link href={e.href} className="itin-item itin-fixed" style={{ cursor: "pointer", textDecoration: "none", color: "inherit" }}>{inner}</Link>
   ) : (
     <div className="itin-item itin-fixed">{inner}</div>
+  );
+}
+
+/** Votes, locking in and the move history for a plan. */
+function DraftPanel({ item }: { item: ItineraryItem }) {
+  const { canEdit, update, nameOf } = useTrip();
+  const toast = useToast();
+  const moves = [...(item.history ?? [])].reverse();
+  const when = (day: string | null, time: string | null) => (day ? `${formatDay(day, { weekday: "short" })}${time ? ` ${formatTime(time)}` : ""}` : "unscheduled");
+  if (!item.draft && !item.locked_at && !moves.length) return null;
+  return (
+    <div className="detail-section draft-panel">
+      {item.draft ? (
+        <>
+          <h3>What everyone thinks</h3>
+          <PlanVotes item={item} />
+          {canEdit && (
+            <button className="btn btn-sm btn-primary" style={{ alignSelf: "flex-start" }} onClick={async () => { if (await update("itinerary_items", item.id, { draft: false })) toast.success("Locked in."); }}>
+              <Lock size={14} /> Lock it in
+            </button>
+          )}
+        </>
+      ) : (
+        <div className="row-between wrap" style={{ gap: 8 }}>
+          <span className="small muted row" style={{ gap: 6 }}>
+            <Lock size={13} /> Locked in {item.locked_by ? `by ${nameOf(item.locked_by).split(" ")[0]}` : "by the group's votes"}
+            {item.locked_at && ` · ${formatDay(item.locked_at.slice(0, 10))}`}
+          </span>
+          {canEdit && (
+            <button className="btn btn-sm" onClick={async () => { if (await update("itinerary_items", item.id, { draft: true })) toast.success("Pencilled back in for another look."); }}>
+              <LockOpen size={14} /> Pencil back in
+            </button>
+          )}
+        </div>
+      )}
+      {moves.length > 0 && (
+        <details className="plan-history">
+          <summary className="tiny muted row" style={{ gap: 6 }}><History size={12} /> Moved {moves.length} time{moves.length === 1 ? "" : "s"}</summary>
+          <ul>
+            {moves.slice(0, 8).map((m, i) => (
+              <li key={i} className="tiny">
+                <strong>{nameOf(m.by).split(" ")[0] || "Someone"}</strong> moved it from {when(m.from_day, m.from_time)} to {when(m.to_day, m.to_time)}
+                <span className="muted"> · {formatDay(m.at.slice(0, 10))}</span>
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
+    </div>
   );
 }

@@ -73,10 +73,15 @@ export function useMoney() {
       return { type, id, title, day, participants, total, paid, deposits, remaining, status, payments, period: opts.period, income: opts.income, name: opts.name ?? title };
     };
 
-    const items = rows.itinerary_items.map((i) => {
+    const allItems = rows.itinerary_items.map((i) => {
       const participants = participantsForItem(i, goingIds);
       return build("itinerary", i.id, i.title, i.day, participants, costTotal(i.cost, pickCost(i), { ...ctxBase, participants }));
     });
+    // Pencilled-in plans aren't committed yet: they count as an estimate, like unbooked options.
+    const draftIds = new Set(rows.itinerary_items.filter((i) => i.draft).map((i) => i.id));
+    const items = allItems.filter((c) => !draftIds.has(c.id));
+    const pencilled = allItems.filter((c) => draftIds.has(c.id));
+    const pencilledTotal = pencilled.reduce((n, c) => n + (c.total ?? 0), 0);
     const flights = rows.flights
       .filter((f) => f.status === "booked")
       .map((f) => {
@@ -124,7 +129,8 @@ export function useMoney() {
     return {
       cur,
       committed,
-      byKey: Object.fromEntries(committed.map((c) => [`${c.type}:${c.id}`, c])) as Record<string, CostedThing>,
+      byKey: Object.fromEntries([...committed, ...pencilled].map((c) => [`${c.type}:${c.id}`, c])) as Record<string, CostedThing>,
+      pencilledTotal,
       incomeByKey: Object.fromEntries(incomeThings.map((c) => [`${c.type}:${c.id}`, c])) as Record<string, CostedThing>,
       incomeThings,
       received,

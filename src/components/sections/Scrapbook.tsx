@@ -14,6 +14,7 @@ import { fontCss, fontHref } from "@/lib/themes";
 import { canSee, linkTitle } from "@/lib/memories";
 import { buildChapters, collage, PAGE_SIZES, STYLES, styleOf, tripNumbers, withDefaults, type Chapter, type PageSize, type ScrapbookPrefs, type StyleDef } from "@/lib/scrapbook";
 import type { Note, Photo } from "@/lib/types";
+import { finalOnly } from "@/lib/drafts";
 
 /** A keepsake of the trip: designed pages that print exactly as they look. */
 export function ScrapbookSection() {
@@ -30,7 +31,7 @@ export function ScrapbookSection() {
   const visibleNotes = useMemo(() => rows.notes.filter((n) => canSee(n, me)), [rows.notes, me]);
   const visiblePhotos = useMemo(() => rows.photos.filter((p) => canSee(p, me)), [rows.photos, me]);
   const src = useMemo(
-    () => ({ start: trip?.start_date ?? null, end: trip?.end_date ?? null, plans: rows.itinerary_items, stays: rows.stays, notes: visibleNotes, photos: visiblePhotos }),
+    () => ({ start: trip?.start_date ?? null, end: trip?.end_date ?? null, plans: finalOnly(rows.itinerary_items), stays: rows.stays, notes: visibleNotes, photos: visiblePhotos }),
     [trip?.start_date, trip?.end_date, rows.itinerary_items, rows.stays, visibleNotes, visiblePhotos],
   );
   // While curating, show hidden things (faded) so they can be brought back.

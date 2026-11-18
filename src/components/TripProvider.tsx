@@ -11,7 +11,7 @@ import { useAuth } from "./AuthProvider";
 import { useToast } from "./ui/Toast";
 import type {
   Comment, Expense, Flight, Idea, Invite, ItineraryItem, Member, Note, PackingItem, Photo,
-  Profile, Stay, Trip, TripView, Vote, Household, HouseholdMember,
+  Profile, Stay, Trip, TripView, Vote, PlanVote, Household, HouseholdMember,
 } from "@/lib/types";
 import type { ListDef, ListItem } from "@/lib/fields";
 import type { Page } from "@/lib/pages";
@@ -21,13 +21,14 @@ import { resolveModules, templateFor, type ResolvedModule, type SpaceTemplate } 
 import { voiceFor, type Voice } from "@/lib/voice";
 
 export type TableName =
-  | "ideas" | "idea_votes" | "itinerary_items" | "flights" | "stays" | "expenses"
+  | "ideas" | "idea_votes" | "plan_votes" | "itinerary_items" | "flights" | "stays" | "expenses"
   | "packing_items" | "notes" | "photos" | "comments" | "trip_members" | "trip_invites"
   | "lists" | "list_items" | "pages";
 
 interface Rows {
   ideas: Idea[];
   idea_votes: Vote[];
+  plan_votes: PlanVote[];
   itinerary_items: ItineraryItem[];
   flights: Flight[];
   stays: Stay[];
@@ -46,20 +47,21 @@ interface Rows {
 type RowOf<T extends TableName> = Rows[T][number];
 
 const TABLES: TableName[] = [
-  "ideas", "idea_votes", "itinerary_items", "flights", "stays", "expenses",
+  "ideas", "idea_votes", "plan_votes", "itinerary_items", "flights", "stays", "expenses",
   "packing_items", "notes", "photos", "comments", "trip_members", "trip_invites",
   "lists", "list_items", "pages",
 ];
 const LIVE_TABLES = TABLES.filter((t) => t !== "trip_invites");
 
 const emptyRows = (): Rows => ({
-  ideas: [], idea_votes: [], itinerary_items: [], flights: [], stays: [], expenses: [],
+  ideas: [], idea_votes: [], plan_votes: [], itinerary_items: [], flights: [], stays: [], expenses: [],
   packing_items: [], notes: [], photos: [], comments: [], trip_members: [], trip_invites: [],
   lists: [], list_items: [], pages: [],
 });
 
 function keyOf(table: TableName, row: Record<string, unknown>): string {
   if (table === "idea_votes") return `${row.idea_id}:${row.user_id}`;
+  if (table === "plan_votes") return `${row.item_id}:${row.user_id}`;
   if (table === "trip_members") return `${row.trip_id}:${row.user_id}`;
   return String(row.id);
 }
@@ -108,6 +110,10 @@ interface TripContextValue {
   updateTrip: (patch: Partial<Trip>) => Promise<boolean>;
   saveView: (patch: Partial<Omit<TripView, "id" | "trip_id" | "user_id">>) => void;
   vote: (ideaId: string, value: 1 | -1 | 0) => Promise<void>;
+  /** 👍 / 👎 on a pencilled-in plan (0 clears your vote). */
+  votePlan: (itemId: string, value: 1 | -1 | 0) => Promise<void>;
+  /** Can this person change this plan? Editors can change anything; anyone can change the drafts they pencilled in. */
+  canChangePlan: (item: Pick<ItineraryItem, "draft" | "created_by">) => boolean;
   photoUrl: (path: string) => string | undefined;
   ensurePhotoUrls: (paths: string[]) => Promise<void>;
   reload: () => Promise<void>;
@@ -461,6 +467,23 @@ export function TripProvider({ tripId, children }: { tripId: string; children: R
     [tripId, me, toast],
   );
 
+  const votePlan = useCallback(
+    async (itemId: string, value: 1 | -1 | 0) => {
+      const sb = supabase();
+      const row = { item_id: itemId, trip_id: tripId, user_id: me, value };
+      if (value === 0) {
+        setRows((r) => ({ ...r, plan_votes: removeRow(r.plan_votes as never[], "plan_votes", row) }));
+        const { error: err } = await sb.from("plan_votes").delete().eq("item_id", itemId).eq("user_id", me);
+        if (err) toast.error(friendlyError(err));
+        return;
+      }
+      setRows((r) => ({ ...r, plan_votes: upsertRow(r.plan_votes as never[], "plan_votes", row as never) }));
+      const { error: err } = await sb.from("plan_votes").upsert(row, { onConflict: "item_id,user_id" });
+      if (err) toast.error(friendlyError(err));
+    },
+    [tripId, me, toast],
+  );
+
   // Personal view: debounce saves so dragging doesn't spam the database.
   const viewSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingView = useRef<Partial<TripView>>({});
@@ -559,10 +582,15 @@ export function TripProvider({ tripId, children }: { tripId: string; children: R
     viewRef.current = resolvedView;
   }, [resolvedView]);
 
+  const canChangePlan = useCallback(
+    (item: Pick<ItineraryItem, "draft" | "created_by">) => canEdit || (!!item.draft && item.created_by === me && !!myRole),
+    [canEdit, me, myRole],
+  );
+
   const value: TripContextValue = {
     tripId, loading, error, offline, trip, rows, profiles, me, myRole, canEdit, isOwner, online,
     view: resolvedView, setPresencePage, nameOf, colorOf, insert, update, remove, updateTrip,
-    saveView, vote, photoUrl, ensurePhotoUrls, reload: load,
+    saveView, vote, votePlan, canChangePlan, photoUrl, ensurePhotoUrls, reload: load,
     households, householdMembers, householdOf, partyOf, partyName, goingIds, reloadHouseholds,
     modules, hasModule, moduleName, template, noun: template.noun, voice,
   };

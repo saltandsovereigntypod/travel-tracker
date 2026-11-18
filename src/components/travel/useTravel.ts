@@ -64,7 +64,7 @@ export function useTravel() {
 
     const flightGroups = optionGroups(flights, flightOptionKey, flightTotal);
     const stayGroups = optionGroups(stays, stayOptionKey, stayTotal);
-    const estimated = estimatedFromOptions(flightGroups) + estimatedFromOptions(stayGroups);
+    const estimated = estimatedFromOptions(flightGroups) + estimatedFromOptions(stayGroups) + money.pencilledTotal;
 
     // Plans with a place: the itinerary (by day), plus ideas people like (no day, lighter weight).
     const points: PlanPoint[] = [
@@ -132,5 +132,5 @@ export function useTravel() {
       plansNear,
       remainingIfBooked: money.budget ? money.remainingBudget - estimated : null,
     };
-  }, [rows.stays, rows.flights, rows.itinerary_items, rows.ideas, airports, goingIds, householdOf, money.budget, money.remainingBudget, trip?.start_date, trip?.end_date]);
+  }, [rows.stays, rows.flights, rows.itinerary_items, rows.ideas, airports, goingIds, householdOf, money.budget, money.remainingBudget, money.pencilledTotal, trip?.start_date, trip?.end_date]);
 }

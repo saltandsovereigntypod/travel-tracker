@@ -129,9 +129,32 @@ export interface ItineraryItem extends CostFields {
   idea_id: string | null;
   participants: string[];
   sort_order: number;
+  /** Pencilled in: everyone can vote, move and comment until it's locked in. */
+  draft?: boolean;
+  /** Moves while pencilled in, newest last. */
+  history?: PlanMove[];
+  locked_at?: string | null;
+  /** Who locked it in (null with locked_at set: the group's votes did). */
+  locked_by?: string | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface PlanMove {
+  at: string;
+  by: string | null;
+  from_day: string | null;
+  to_day: string | null;
+  from_time: string | null;
+  to_time: string | null;
+}
+
+export interface PlanVote {
+  item_id: string;
+  trip_id: string;
+  user_id: string;
+  value: 1 | -1;
 }
 
 /** A layover (connecting flight/train) or a stop on a drive. */
