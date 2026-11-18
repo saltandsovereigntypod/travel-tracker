@@ -131,6 +131,8 @@ export interface ItineraryItem extends CostFields {
   sort_order: number;
   /** Pencilled in: everyone can vote, move and comment until it's locked in. */
   draft?: boolean;
+  /** Which version of its day this plan belongs to (none: the day's first version, or shared once locked in). */
+  version_id?: string | null;
   /** Moves while pencilled in, newest last. */
   history?: PlanMove[];
   locked_at?: string | null;
@@ -148,6 +150,25 @@ export interface PlanMove {
   to_day: string | null;
   from_time: string | null;
   to_time: string | null;
+}
+
+/** A competing version of one day ("B: City day"). */
+export interface DayVersion {
+  id: string;
+  trip_id: string;
+  day: string;
+  name: string;
+  sort_order: number;
+  created_by: string | null;
+  created_at: string;
+}
+
+/** One vote per person per day, for the version they want. */
+export interface DayVersionVote {
+  trip_id: string;
+  day: string;
+  user_id: string;
+  version_id: string;
 }
 
 export interface PlanVote {
