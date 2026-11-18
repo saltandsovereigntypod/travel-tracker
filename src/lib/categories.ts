@@ -1,3 +1,5 @@
+import { anyCategory, anyExpenseCategory } from "./voice";
+
 export const CATEGORIES: { id: string; label: string; emoji: string }[] = [
   { id: "activity", label: "Activity", emoji: "🎟️" },
   { id: "sight", label: "Sightseeing", emoji: "🏛️" },
@@ -13,8 +15,8 @@ export const CATEGORIES: { id: string; label: string; emoji: string }[] = [
   { id: "other", label: "Other", emoji: "✨" },
 ];
 
-export const categoryOf = (id: string | null | undefined) =>
-  CATEGORIES.find((c) => c.id === id) ?? CATEGORIES[CATEGORIES.length - 1];
+// Any space's categories resolve (a podcast's "Interview", a wedding's "Venue"…).
+export const categoryOf = (id: string | null | undefined) => CATEGORIES.find((c) => c.id === id) ?? anyCategory(id);
 
 export const EXPENSE_CATEGORIES: { id: string; label: string; emoji: string }[] = [
   { id: "flights", label: "Flights", emoji: "✈️" },
@@ -26,8 +28,7 @@ export const EXPENSE_CATEGORIES: { id: string; label: string; emoji: string }[] 
   { id: "other", label: "Other", emoji: "✨" },
 ];
 
-export const expenseCategoryOf = (id: string | null | undefined) =>
-  EXPENSE_CATEGORIES.find((c) => c.id === id) ?? EXPENSE_CATEGORIES[EXPENSE_CATEGORIES.length - 1];
+export const expenseCategoryOf = (id: string | null | undefined) => EXPENSE_CATEGORIES.find((c) => c.id === id) ?? anyExpenseCategory(id);
 
 export const STAY_KINDS: { id: string; label: string; emoji: string }[] = [
   { id: "hotel", label: "Hotel", emoji: "🏨" },

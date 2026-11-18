@@ -10,7 +10,7 @@ import { CardOptions, useCardParts } from "../ui/CardOptions";
 import { ModuleTitle } from "../ModuleTitle";
 import { Modal } from "../ui/Modal";
 import { Avatar, EmptyState, Field, PersonPicker, Segmented } from "../ui/Fields";
-import { EXPENSE_CATEGORIES, expenseCategoryOf } from "@/lib/categories";
+import { expenseCategoryOf } from "@/lib/categories";
 import { formatDay, formatMoney, todayString } from "@/lib/format";
 import { CURRENCIES, exchangeRate } from "@/lib/services";
 import { expenseShares, groupBalances, netBalances, settleUp } from "@/lib/balances";
@@ -34,7 +34,7 @@ export interface ExpensePreset {
 }
 
 export function BudgetSection({ compact = false }: { compact?: boolean }) {
-  const { rows, canEdit, updateTrip, nameOf, colorOf, insert, me, tripId, partyOf, partyName, households } = useTrip();
+  const { rows, canEdit, updateTrip, nameOf, colorOf, insert, me, tripId, partyOf, partyName, households, voice } = useTrip();
   const money = useMoney();
   const travel = useTravel();
   const show = useCardParts("expenses");
@@ -152,7 +152,7 @@ export function BudgetSection({ compact = false }: { compact?: boolean }) {
       <div className="section-head">
         <div>
           <ModuleTitle id="budget" fallback="Budget" />
-          <p>Plans you schedule count as <strong>still to pay</strong>. Mark them paid (or pay a deposit) and they move to <strong>spent</strong>.</p>
+          <p>{voice.budget.hint}</p>
         </div>
         {canEdit && <button className="btn btn-primary" onClick={() => openNew()}><Plus size={16} /> Add expense</button>}
       </div>
@@ -302,7 +302,7 @@ export function BudgetSection({ compact = false }: { compact?: boolean }) {
       </div>
       {expenses.length === 0 ? (
         <div className="card">
-          <EmptyState icon={<Wallet />} title="Nothing paid yet">Use &quot;Mark as paid&quot; or &quot;Add deposit&quot; on any plan, flight or stay, or add an expense here.</EmptyState>
+          <EmptyState icon={<Wallet />} title="Nothing paid yet">{voice.budget.empty}</EmptyState>
         </div>
       ) : (
         <div className="card" style={{ padding: "0.4rem" }}>
@@ -413,7 +413,7 @@ function ToPayRow({ thing: c, canEdit, onPay }: { thing: CostedThing; canEdit: b
 }
 
 export function ExpenseModal({ expense, preset, onClose }: { expense: Expense | "new" | null; preset?: ExpensePreset | null; onClose: () => void }) {
-  const { trip, rows, insert, update, remove, canEdit, me, nameOf, colorOf } = useTrip();
+  const { trip, rows, insert, update, remove, canEdit, me, nameOf, colorOf, voice } = useTrip();
   const cur = trip?.currency ?? "USD";
   const existing = expense && expense !== "new" ? expense : null;
   const going = rows.trip_members.filter((m) => m.attendance !== "not_going").map((m) => m.user_id);
@@ -570,7 +570,7 @@ export function ExpenseModal({ expense, preset, onClose }: { expense: Expense | 
               {form.kind === "income" && <span className="field-hint">Sponsorships, gifts, refunds, reimbursements. Whoever received it owes everyone their share.</span>}
             </div>
           )}
-          <Field label="What for" full><input className="input" value={form.title} onChange={(e) => set("title", e.target.value)} placeholder="Ghost tour tickets" required /></Field>
+          <Field label="What for" full><input className="input" value={form.title} onChange={(e) => set("title", e.target.value)} placeholder={voice.budget.expensePlaceholder} required /></Field>
           <Field label="Amount"><input className="input" type="number" min="0" step="0.01" value={form.amount} onChange={(e) => set("amount", e.target.value)} required /></Field>
           <Field label="Currency">
             <select className="input" value={form.currency} onChange={(e) => set("currency", e.target.value)}>
@@ -587,7 +587,7 @@ export function ExpenseModal({ expense, preset, onClose }: { expense: Expense | 
           )}
           <Field label="Category">
             <select className="input" value={form.category} onChange={(e) => set("category", e.target.value)}>
-              {EXPENSE_CATEGORIES.map((c) => <option key={c.id} value={c.id}>{c.emoji} {c.label}</option>)}
+              {voice.expenseCategories.map((c) => <option key={c.id} value={c.id}>{c.emoji} {c.label}</option>)}
               {form.category === "settlement" && <option value="settlement">🤝 Settle up</option>}
             </select>
           </Field>

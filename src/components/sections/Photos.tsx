@@ -100,7 +100,7 @@ export function usePhotoUpload() {
 type View = "all" | PhotoGrouping;
 
 export function PhotosSection({ compact = false, limit }: { compact?: boolean; limit?: number }) {
-  const { rows, canEdit, ensurePhotoUrls, photoUrl, tripId, me, nameOf } = useTrip();
+  const { rows, canEdit, ensurePhotoUrls, photoUrl, tripId, me, nameOf, voice } = useTrip();
   const { upload, busy } = usePhotoUpload();
   const [over, setOver] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
@@ -161,7 +161,7 @@ export function PhotosSection({ compact = false, limit }: { compact?: boolean; l
         <div className="section-head">
           <div>
             <ModuleTitle id="photos" fallback="Photos" />
-            <p>Everyone&apos;s pictures, sorted by day, plan and person automatically. Heart the best ones for the scrapbook.</p>
+            <p>{voice.photos.hint}</p>
           </div>
           <div className="toolbar">
             {canEdit && <button className="btn btn-primary" onClick={() => input.current?.click()}><Upload size={16} /> Upload</button>}
@@ -178,7 +178,7 @@ export function PhotosSection({ compact = false, limit }: { compact?: boolean; l
             options={[
               { value: "all", label: "All" },
               { value: "day", label: "By day" },
-              { value: "plan", label: "By plan & stay" },
+              { value: "plan", label: voice.photos.byLinked },
               { value: "person", label: "By person" },
               { value: "album", label: "Albums" },
             ]}
@@ -200,7 +200,7 @@ export function PhotosSection({ compact = false, limit }: { compact?: boolean; l
       )}
       {shown.length === 0 ? (
         <EmptyState icon={<Camera />} title={fav ? "No favorites yet" : "No photos yet"} action={canEdit && !fav && <button className="btn btn-sm" onClick={() => input.current?.click()}><Upload size={14} /> Add photos</button>}>
-          {fav ? "Open a photo and tap the heart." : "Inspiration shots before, real ones during."}
+          {fav ? "Open a photo and tap the heart." : voice.photos.empty}
         </EmptyState>
       ) : groups ? (
         <div className="stack" style={{ gap: "1.4rem" }}>
@@ -229,7 +229,7 @@ export function PhotosSection({ compact = false, limit }: { compact?: boolean; l
 }
 
 function PhotoPanel({ photo, onClose }: { photo: Photo | null; onClose: () => void }) {
-  const { photoUrl, ensurePhotoUrls, update, remove, canEdit, nameOf, me, rows } = useTrip();
+  const { photoUrl, ensurePhotoUrls, update, remove, canEdit, nameOf, me, rows, voice } = useTrip();
   const [caption, setCaption] = useState("");
   const [album, setAlbum] = useState("");
   const [loadedFor, setLoadedFor] = useState<string | null>(null);
@@ -295,7 +295,7 @@ function PhotoPanel({ photo, onClose }: { photo: Photo | null; onClose: () => vo
             <Field label="Caption" full>
               <input className="input" value={caption} onChange={(e) => setCaption(e.target.value)} onBlur={() => caption !== photo.caption && update("photos", photo.id, { caption })} placeholder="Say something about it" />
             </Field>
-            <Field label="Attached to" hint="Shows with that plan, stay or flight, and in its scrapbook chapter.">
+            <Field label="Attached to" hint={voice.attachHint}>
               <AttachPicker type={photo.linked_type} id={photo.linked_id} onChange={(t, id) => update("photos", photo.id, { linked_type: t, linked_id: id })} />
             </Field>
             <Field label="Album">

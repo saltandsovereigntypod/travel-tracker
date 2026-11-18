@@ -41,7 +41,7 @@ function circle(lat: number, lng: number, km: number, steps = 64): [number, numb
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 
 export function MapSection({ compact = false, height }: { compact?: boolean; height?: number }) {
-  const { rows, trip } = useTrip();
+  const { rows, trip, voice } = useTrip();
   const box = useRef<HTMLDivElement>(null);
   const map = useRef<MLMap | null>(null);
   const markers = useRef<Marker[]>([]);
@@ -191,7 +191,7 @@ export function MapSection({ compact = false, height }: { compact?: boolean; hei
         <div className="section-head" style={{ marginBottom: 0 }}>
           <div>
             <ModuleTitle id="map" fallback="Map" />
-            <p>Plans, ideas and stays with a location. Pick a day to see its route.</p>
+            <p>Everything with a place, pinned. Pick a day to see its route.</p>
           </div>
         </div>
       )}
@@ -208,7 +208,7 @@ export function MapSection({ compact = false, height }: { compact?: boolean; hei
             options={[
               { value: "plan", label: `${layers.plan ? "✓" : "○"} Plans` },
               { value: "idea", label: `${layers.idea ? "✓" : "○"} Ideas` },
-              { value: "stay", label: `${layers.stay ? "✓" : "○"} Stays` },
+              ...(voice.travel || rows.stays.length ? [{ value: "stay", label: `${layers.stay ? "✓" : "○"} Stays` }] : []),
               { value: "list", label: `${layers.list ? "✓" : "○"} Lists` },
               ...(travel.periods.length ? [{ value: "spot", label: `${layers.spot ? "✓" : "○"} Where to stay` }] : []),
             ]}

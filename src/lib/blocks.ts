@@ -13,19 +13,21 @@ export interface BlockMeta {
 }
 
 export const BLOCKS: BlockMeta[] = [
-  { type: "hero", label: "Trip header", description: "Name, dates and travelers", group: "Trip info", defaultWidth: "full", boardSize: { w: 720, h: 260 } },
-  { type: "countdown", label: "Countdown", description: "Days until you leave", group: "Trip info", defaultWidth: "third", boardSize: { w: 280, h: 200 } },
+  { type: "hero", label: "Header", description: "Name, dates and people", group: "Trip info", defaultWidth: "full", boardSize: { w: 720, h: 260 } },
+  { type: "countdown", label: "Countdown", description: "Days until the big day, or the next thing", group: "Trip info", defaultWidth: "third", boardSize: { w: 280, h: 200 } },
   { type: "today", label: "Today / Up next", description: "What's happening now", group: "Trip info", defaultWidth: "two-thirds", boardSize: { w: 440, h: 320 }, section: "today" },
   { type: "ideas", label: "Ideas", description: "Everyone's wishlist, with votes", group: "Trip info", defaultWidth: "full", boardSize: { w: 620, h: 460 }, section: "ideas" },
   { type: "itinerary", label: "Itinerary", description: "Day-by-day plan", group: "Trip info", defaultWidth: "full", boardSize: { w: 620, h: 520 }, section: "itinerary" },
   { type: "flights", label: "Flights", description: "Boarding passes", group: "Trip info", defaultWidth: "half", boardSize: { w: 440, h: 340 }, section: "flights" },
   { type: "stays", label: "Stays", description: "Hotels, hostels, rentals", group: "Trip info", defaultWidth: "half", boardSize: { w: 440, h: 340 }, section: "stays" },
   { type: "budget", label: "Budget", description: "Spending and who owes whom", group: "Trip info", defaultWidth: "half", boardSize: { w: 420, h: 340 }, section: "budget" },
-  { type: "packing", label: "Packing", description: "Shared and personal lists", group: "Trip info", defaultWidth: "half", boardSize: { w: 380, h: 420 }, section: "packing" },
+  { type: "packing", label: "Checklists", description: "Shared and personal lists", group: "Trip info", defaultWidth: "half", boardSize: { w: 380, h: 420 }, section: "packing" },
   { type: "notes", label: "Notes", description: "Shared notes and journal", group: "Trip info", defaultWidth: "half", boardSize: { w: 420, h: 360 }, section: "notes" },
-  { type: "photos", label: "Photos", description: "Trip photo grid", group: "Trip info", defaultWidth: "full", boardSize: { w: 560, h: 380 }, section: "photos" },
+  { type: "photos", label: "Photos", description: "Photo grid", group: "Trip info", defaultWidth: "full", boardSize: { w: 560, h: 380 }, section: "photos" },
   { type: "map", label: "Map", description: "Everything pinned on a map", group: "Trip info", defaultWidth: "full", boardSize: { w: 620, h: 420 }, section: "map" },
-  { type: "people", label: "Travelers", description: "Who's coming", group: "Trip info", defaultWidth: "third", boardSize: { w: 300, h: 260 }, section: "people" },
+  { type: "people", label: "People", description: "Who's in", group: "Trip info", defaultWidth: "third", boardSize: { w: 300, h: 260 }, section: "people" },
+  { type: "list", label: "List", description: "Any list (episodes, guests, bills…) as cards, a board, a table or a checklist", group: "Trip info", defaultWidth: "full", boardSize: { w: 620, h: 460 } },
+  { type: "nextup", label: "Next up", description: "What's coming soon, from every list and the calendar", group: "Trip info", defaultWidth: "half", boardSize: { w: 420, h: 360 } },
   { type: "heading", label: "Heading", description: "A big title", group: "Decorate", defaultWidth: "full", boardSize: { w: 480, h: 110 } },
   { type: "text", label: "Text", description: "Your own words", group: "Decorate", defaultWidth: "half", boardSize: { w: 340, h: 200 } },
   { type: "quote", label: "Quote", description: "A quote or mantra", group: "Decorate", defaultWidth: "half", boardSize: { w: 380, h: 180 } },
@@ -47,25 +49,101 @@ export function newPageBlock(type: BlockType): PageBlock {
   if (type === "quote") block.props = { text: "Not all those who wander are lost." };
   if (type === "sticker") block.props = { sticker: "/stickers/passport-stamp.svg" };
   if (type === "links") block.props = { links: [] };
+  if (type === "list") block.props = { view: "cards", limit: 6 };
+  if (type === "nextup") block.props = { limit: 6 };
   return block;
 }
 
-export function defaultPageLayout(): PageBlock[] {
-  return [
+const TRIP_LAYOUT: PageBlock[] = [
+  { id: "hero", type: "hero", width: "full" },
+  { id: "countdown", type: "countdown", width: "third" },
+  { id: "today", type: "today", width: "two-thirds" },
+  { id: "ideas", type: "ideas", width: "full", props: { limit: 6 } },
+  { id: "itinerary", type: "itinerary", width: "full" },
+  { id: "flights", type: "flights", width: "half" },
+  { id: "stays", type: "stays", width: "half" },
+  { id: "budget", type: "budget", width: "half" },
+  { id: "packing", type: "packing", width: "half" },
+  { id: "map", type: "map", width: "full" },
+  { id: "notes", type: "notes", width: "half" },
+  { id: "people", type: "people", width: "half" },
+  { id: "photos", type: "photos", width: "full" },
+];
+
+const list = (key: string, width: PageBlock["width"], view: NonNullable<PageBlock["props"]>["view"], limit = 8): PageBlock => ({
+  id: `list-${key}`,
+  type: "list",
+  width,
+  props: { listTemplate: key, view, limit },
+});
+
+/** Each kind of space opens on a home made for it. */
+const LAYOUTS: Record<string, PageBlock[]> = {
+  trip: TRIP_LAYOUT,
+  podcast: [
     { id: "hero", type: "hero", width: "full" },
     { id: "countdown", type: "countdown", width: "third" },
-    { id: "today", type: "today", width: "two-thirds" },
+    { id: "nextup", type: "nextup", width: "two-thirds", props: { limit: 6 } },
+    list("episodes", "full", "board", 30),
     { id: "ideas", type: "ideas", width: "full", props: { limit: 6 } },
-    { id: "itinerary", type: "itinerary", width: "full" },
-    { id: "flights", type: "flights", width: "half" },
-    { id: "stays", type: "stays", width: "half" },
+    list("podcast_guests", "half", "cards", 6),
+    list("sponsors", "half", "cards", 6),
+    { id: "itinerary", type: "itinerary", width: "half" },
     { id: "budget", type: "budget", width: "half" },
-    { id: "packing", type: "packing", width: "half" },
-    { id: "map", type: "map", width: "full" },
     { id: "notes", type: "notes", width: "half" },
     { id: "people", type: "people", width: "half" },
     { id: "photos", type: "photos", width: "full" },
-  ];
+  ],
+  wedding: [
+    { id: "hero", type: "hero", width: "full" },
+    { id: "countdown", type: "countdown", width: "third" },
+    { id: "nextup", type: "nextup", width: "two-thirds", props: { limit: 6 } },
+    list("guests", "full", "table", 12),
+    list("vendors", "full", "cards", 6),
+    { id: "budget", type: "budget", width: "half" },
+    { id: "packing", type: "packing", width: "half" },
+    { id: "ideas", type: "ideas", width: "full", props: { limit: 6 } },
+    { id: "itinerary", type: "itinerary", width: "full" },
+    { id: "photos", type: "photos", width: "full" },
+  ],
+  household: [
+    { id: "hero", type: "hero", width: "full" },
+    { id: "nextup", type: "nextup", width: "two-thirds", props: { limit: 6 } },
+    { id: "budget", type: "budget", width: "third" },
+    list("bills", "half", "checklist", 8),
+    list("chores", "half", "checklist", 8),
+    { id: "itinerary", type: "itinerary", width: "full" },
+    { id: "packing", type: "packing", width: "half" },
+    { id: "notes", type: "notes", width: "half" },
+    { id: "ideas", type: "ideas", width: "full", props: { limit: 6 } },
+  ],
+  event: [
+    { id: "hero", type: "hero", width: "full" },
+    { id: "countdown", type: "countdown", width: "third" },
+    { id: "nextup", type: "nextup", width: "two-thirds", props: { limit: 6 } },
+    list("guests", "full", "table", 12),
+    list("tasks", "half", "checklist", 8),
+    { id: "budget", type: "budget", width: "half" },
+    { id: "ideas", type: "ideas", width: "full", props: { limit: 6 } },
+    { id: "itinerary", type: "itinerary", width: "full" },
+    { id: "photos", type: "photos", width: "full" },
+  ],
+  blank: [
+    { id: "hero", type: "hero", width: "full" },
+    { id: "nextup", type: "nextup", width: "two-thirds", props: { limit: 6 } },
+    { id: "today", type: "today", width: "third" },
+    { id: "notes", type: "notes", width: "full" },
+  ],
+};
+
+export function defaultPageLayout(kind?: string | null): PageBlock[] {
+  return (LAYOUTS[kind ?? "trip"] ?? LAYOUTS.blank).map((b) => ({ ...b, props: b.props ? { ...b.props } : undefined }));
+}
+
+/** A saved layout that is still exactly the old trip default (never customized). */
+export function isUntouchedTripLayout(page: PageBlock[] | undefined): boolean {
+  if (!page?.length) return false;
+  return page.map((b) => `${b.id}:${b.type}`).join("|") === TRIP_LAYOUT.map((b) => `${b.id}:${b.type}`).join("|");
 }
 
 /** Lay out page blocks onto a board in a tidy grid, as a starting point. */

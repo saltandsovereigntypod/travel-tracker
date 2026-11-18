@@ -26,7 +26,9 @@ export type FieldType =
   | "rating"
   | "relation"
   | "rollup"
-  | "repeat";
+  | "repeat"
+  | "checklist"
+  | "page";
 
 export type OptionKind = "todo" | "doing" | "done" | "cancelled";
 
@@ -52,7 +54,24 @@ export interface FieldDef {
   feeds?: { budget?: boolean; calendar?: boolean; map?: boolean };
   /** money: cost (spending, the default) or income (money coming in, e.g. sponsor deals). */
   moneyKind?: "cost" | "income";
+  /** checklist: the steps every item gets, optionally grouped into stages. */
+  steps?: ChecklistStep[];
+  /** checklist: finishing a stage's steps moves the item's status to that stage. */
+  autoAdvance?: boolean;
+  /** date: how often one is expected (a weekly release), so gaps can be flagged. */
+  cadence?: Cadence;
+  /** page: which page template new linked pages start from. */
+  pageTemplate?: string;
 }
+
+export interface ChecklistStep {
+  id: string;
+  label: string;
+  /** Usually matches a status option (e.g. "Recorded"). */
+  stage?: string;
+}
+
+export type Cadence = "week" | "2weeks" | "month";
 
 export type RepeatFreq = "day" | "week" | "month" | "year";
 
@@ -111,6 +130,7 @@ export const FIELD_TYPES: { type: FieldType; label: string; icon: string; feeds?
   { type: "select", label: "Dropdown", icon: "▾", group: "Choices" },
   { type: "multiselect", label: "Tags", icon: "🏷", group: "Choices" },
   { type: "rating", label: "Rating", icon: "★", group: "Choices" },
+  { type: "checklist", label: "Checklist (steps)", icon: "✔", feeds: "Progress", group: "Choices" },
   { type: "person", label: "Person", icon: "👤", feeds: "Assignments", group: "People & places" },
   { type: "people", label: "People", icon: "👥", feeds: "Assignments & splits", group: "People & places" },
   { type: "place", label: "Place", icon: "📍", feeds: "Map", group: "People & places" },
@@ -119,6 +139,7 @@ export const FIELD_TYPES: { type: FieldType; label: string; icon: string; feeds?
   { type: "phone", label: "Phone", icon: "☎", group: "People & places" },
   { type: "relation", label: "Link to another list", icon: "↔", feeds: "Both lists", group: "Connections" },
   { type: "rollup", label: "Count / total from links", icon: "Σ", group: "Connections" },
+  { type: "page", label: "Linked page", icon: "📄", group: "Connections" },
 ];
 
 export const fieldTypeMeta = (t: FieldType) => FIELD_TYPES.find((f) => f.type === t)!;
@@ -142,6 +163,7 @@ export function newField(type: FieldType, name?: string): FieldDef {
   if (type === "status") f.options = defaultStatusOptions();
   if (type === "select" || type === "multiselect") f.options = [];
   if (type === "rollup") f.rollup = { via: "", op: "count" };
+  if (type === "checklist") f.steps = [];
   return f;
 }
 
@@ -508,4 +530,115 @@ export function stripLinks(values: Record<string, unknown>, list: ListDef, remov
     }
   }
   return changed ? next : null;
+}
+
+
+// ---------------------------------------------------------------- checklists
+
+/** Which steps are ticked (ids). */
+export const checklistDone = (v: unknown): string[] => asIds(v);
+
+export function checklistProgress(field: FieldDef, v: unknown): { done: number; total: number } {
+  const steps = field.steps ?? [];
+  const done = new Set(checklistDone(v));
+  return { done: steps.filter((s) => done.has(s.id)).length, total: steps.length };
+}
+
+/** Steps from text: one per line; a line starting with "#" starts a stage. */
+export function stepsFromText(text: string, existing: ChecklistStep[] = []): ChecklistStep[] {
+  let stage: string | undefined;
+  const out: ChecklistStep[] = [];
+  for (const raw of text.split("\n")) {
+    const line = raw.trim();
+    if (!line) continue;
+    if (line.startsWith("#")) {
+      stage = line.replace(/^#+\s*/, "") || undefined;
+      continue;
+    }
+    // Keep ids for steps that still exist, so ticks survive edits.
+    const keep = existing.find((e) => e.label === line && e.stage === stage && !out.some((o) => o.id === e.id));
+    out.push({ id: keep?.id ?? fid("s"), label: line, stage });
+  }
+  return out;
+}
+
+export function stepsToText(steps: ChecklistStep[]): string {
+  const lines: string[] = [];
+  let stage: string | undefined;
+  for (const s of steps) {
+    if (s.stage !== stage) {
+      stage = s.stage;
+      if (stage) lines.push(`# ${stage}`);
+    }
+    lines.push(s.label);
+  }
+  return lines.join("\n");
+}
+
+/**
+ * Finishing a stage's steps moves the item to that stage (never backwards).
+ * Stages match status options by name, so "Recorded" steps done → status "Recorded".
+ */
+export function advanceByChecklist(list: ListDef, values: Record<string, unknown>): Record<string, unknown> | null {
+  const sf = statusField(list);
+  const cl = list.fields.find((f) => f.type === "checklist" && f.autoAdvance && f.steps?.length);
+  if (!sf || !cl || !sf.options?.length) return null;
+  const done = new Set(checklistDone(values[cl.id]));
+  const order = sf.options.map((o) => o.label.trim().toLowerCase());
+  const current = order.indexOf(sf.options.find((o) => o.id === values[sf.id])?.label.trim().toLowerCase() ?? "");
+  let target = current;
+  for (let i = 0; i < sf.options.length; i++) {
+    const steps = cl.steps!.filter((s) => s.stage?.trim().toLowerCase() === order[i]);
+    if (!steps.length) continue;
+    if (steps.every((s) => done.has(s.id))) target = Math.max(target, i);
+    else break;
+  }
+  if (target <= current) return null;
+  return { ...values, [sf.id]: sf.options[target].id };
+}
+
+// ---------------------------------------------------------------- cadence
+
+const startOfWeek = (day: string) => {
+  const d = new Date(`${day}T12:00:00`);
+  const dow = (d.getDay() + 6) % 7; // Monday = 0
+  d.setDate(d.getDate() - dow);
+  return d.toISOString().slice(0, 10);
+};
+const plusDays = (day: string, n: number) => {
+  const d = new Date(`${day}T12:00:00`);
+  d.setDate(d.getDate() + n);
+  return d.toISOString().slice(0, 10);
+};
+
+/**
+ * For a date field with a cadence (a weekly release), the coming periods that have nothing
+ * in them yet: returns each empty period's first day. Cancelled items don't count.
+ */
+export function cadenceGaps(items: ListItem[], list: ListDef, field: FieldDef, from: string, count = 6): string[] {
+  if (!field.cadence) return [];
+  const dates = items
+    .filter((i) => i.list_id === list.id && !isCancelled(i, list))
+    .map((i) => asDate(field, i.values[field.id])?.date)
+    .filter((d): d is string => !!d);
+  const gaps: string[] = [];
+  if (field.cadence === "month") {
+    const [y, m] = from.split("-").map(Number);
+    for (let k = 0; k < count; k++) {
+      const mm = ((m - 1 + k) % 12) + 1;
+      const yy = y + Math.floor((m - 1 + k) / 12);
+      const start = `${yy}-${String(mm).padStart(2, "0")}-01`;
+      const prefix = start.slice(0, 7);
+      if (!dates.some((d) => d.startsWith(prefix))) gaps.push(start);
+    }
+    return gaps;
+  }
+  const len = field.cadence === "2weeks" ? 14 : 7;
+  let start = startOfWeek(from);
+  for (let k = 0; k < count; k++) {
+    const end = plusDays(start, len);
+    if (!dates.some((d) => d >= start && d < end)) gaps.push(start);
+    start = end;
+  }
+  return gaps;
 }

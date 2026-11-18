@@ -13,7 +13,7 @@ import type { Attendance, Member, Role } from "@/lib/types";
 const COLORS = ["#E07A5F", "#3D5A80", "#81B29A", "#F2CC8F", "#9B5DE5", "#F15BB5", "#00BBF9", "#6D597A", "#2A9D8F", "#E76F51"];
 
 export function PeopleSection({ compact = false }: { compact?: boolean }) {
-  const { rows, me, nameOf, profiles } = useTrip();
+  const { rows, me, nameOf, profiles, voice } = useTrip();
   const going = rows.trip_members.filter((m) => m.attendance === "going");
   const maybe = rows.trip_members.filter((m) => m.attendance === "maybe");
 
@@ -36,7 +36,7 @@ export function PeopleSection({ compact = false }: { compact?: boolean }) {
       <div className="section-head" style={{ marginBottom: 0 }}>
         <div>
           <h1>People & sharing</h1>
-          <p>Who&apos;s coming, who can edit, and how to bring more people in.</p>
+          <p>{voice.people.hint}</p>
         </div>
       </div>
       <div className="card">

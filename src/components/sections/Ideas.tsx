@@ -16,7 +16,7 @@ import { ideaTotal } from "./money";
 import { orderForTime, itemsForDay } from "./itinerary-order";
 import { pickCost, unitLabel } from "@/lib/costs";
 import { CommentThread, useCommentCount } from "./Comments";
-import { CATEGORIES, categoryOf } from "@/lib/categories";
+import { categoryOf } from "@/lib/categories";
 import { formatDay, formatMoney, hostname, normalizeUrl, tripDays } from "@/lib/format";
 import type { Idea, IdeaStatus, Place } from "@/lib/types";
 import { Check } from "lucide-react";
@@ -45,7 +45,7 @@ export function useEveryoneIn() {
 }
 
 export function IdeasSection({ compact = false, limit }: { compact?: boolean; limit?: number }) {
-  const { rows, canEdit, tripId, me, trip, goingIds, householdOf } = useTrip();
+  const { rows, canEdit, tripId, me, trip, goingIds, householdOf, voice } = useTrip();
   const scores = useIdeaScores();
   const [filter, setFilter] = useState<Filter>("all");
   const show = useCardParts("ideas");
@@ -116,13 +116,13 @@ export function IdeasSection({ compact = false, limit }: { compact?: boolean; li
           <div>
             <ModuleTitle id="ideas" fallback="Ideas" />
             <p>
-              Everything anyone wants to do. Vote, comment, then add the winners to the itinerary.
-              {wishlist > 0 && <> Doing every open idea would cost about <strong>{formatMoney(wishlist, trip?.currency)}</strong>.</>}
+              {voice.ideas.hint}
+              {wishlist > 0 && <> All the open ones together would cost about <strong>{formatMoney(wishlist, trip?.currency)}</strong>.</>}
             </p>
           </div>
           {canEdit && (
             <button className="btn btn-primary" onClick={() => setEditing("new")}>
-              <Plus size={16} /> Add idea
+              <Plus size={16} /> {voice.ideas.add}
             </button>
           )}
         </div>
@@ -144,7 +144,7 @@ export function IdeasSection({ compact = false, limit }: { compact?: boolean; li
           <div className="grow" />
           <select className="input" style={{ width: "auto" }} value={category} onChange={(e) => setCategory(e.target.value)} aria-label="Category">
             <option value="">All categories</option>
-            {CATEGORIES.map((c) => (
+            {voice.ideaCategories.map((c) => (
               <option key={c.id} value={c.id}>{c.emoji} {c.label}</option>
             ))}
           </select>
@@ -156,10 +156,10 @@ export function IdeasSection({ compact = false, limit }: { compact?: boolean; li
       {list.length === 0 ? (
         <EmptyState
           icon={<Lightbulb />}
-          title={rows.ideas.length ? "Nothing matches" : "No ideas yet"}
-          action={canEdit && <button className="btn btn-primary" onClick={() => setEditing("new")}><Plus size={16} /> Add the first idea</button>}
+          title={rows.ideas.length ? "Nothing matches" : voice.ideas.empty}
+          action={canEdit && <button className="btn btn-primary" onClick={() => setEditing("new")}><Plus size={16} /> {voice.ideas.add}</button>}
         >
-          {rows.ideas.length ? "Try a different filter." : "Restaurants, tours, shops, that one bookstore… drop it all here."}
+          {rows.ideas.length ? "Try a different filter." : voice.ideas.emptyHint}
         </EmptyState>
       ) : (
         <>
@@ -167,7 +167,7 @@ export function IdeasSection({ compact = false, limit }: { compact?: boolean; li
             <div className="running-total">
               <span className="tiny muted">Running estimate</span>
               <strong>≈ {formatMoney(running, trip?.currency)}</strong>
-              <span className="tiny muted">for {priced} idea{priced === 1 ? "" : "s"} with a price, for everyone going</span>
+              <span className="tiny muted">for {priced} {voice.ideas.thing}{priced === 1 ? "" : "s"} with a price, for everyone</span>
             </div>
           )}
           {(groups ?? [["", { title: "", ideas: list }] as const]).map(([key, g]) => (
@@ -184,7 +184,7 @@ export function IdeasSection({ compact = false, limit }: { compact?: boolean; li
       )}
       {compact && (
         <div className="row" style={{ marginTop: "0.8rem" }}>
-          {canEdit && <button className="btn btn-sm" onClick={() => setEditing("new")}><Plus size={14} /> Add idea</button>}
+          {canEdit && <button className="btn btn-sm" onClick={() => setEditing("new")}><Plus size={14} /> {voice.ideas.add}</button>}
           <Link className="btn btn-sm btn-ghost" href={`/trips/${tripId}/ideas`}>See all {rows.ideas.length} →</Link>
         </div>
       )}
@@ -197,7 +197,7 @@ export function IdeasSection({ compact = false, limit }: { compact?: boolean; li
 function IdeaCard({ idea, compact, onOpen, onSchedule }: { idea: Idea; compact?: boolean; onOpen: () => void; onSchedule: () => void }) {
   const show = useCardParts("ideas");
   const onEdit = onOpen;
-  const { me, rows, vote, nameOf, colorOf, canEdit, trip, goingIds, householdOf } = useTrip();
+  const { me, rows, vote, nameOf, colorOf, canEdit, trip, goingIds, householdOf, voice } = useTrip();
   const scores = useIdeaScores();
   const everyoneIn = useEveryoneIn()(idea.id);
   const total = ideaTotal(idea, goingIds, householdOf);
@@ -271,7 +271,7 @@ function IdeaCard({ idea, compact, onOpen, onSchedule }: { idea: Idea; compact?:
         </button>}
         <div className="grow" />
         {show("schedule") && canEdit && idea.status !== "planned" && (
-          <button className="btn btn-sm btn-ghost" onClick={onSchedule} title="Add to itinerary">
+          <button className="btn btn-sm btn-ghost" onClick={onSchedule} title={voice.ideas.schedule}>
             <CalendarPlus size={15} /> {!compact && "Schedule"}
           </button>
         )}
@@ -298,7 +298,7 @@ function IdeaPanel({
   onView: (i: Idea) => void;
   onSchedule: (i: Idea) => void;
 }) {
-  const { canEdit, rows, remove } = useTrip();
+  const { canEdit, rows, remove, voice } = useTrip();
   const live = open && open.idea !== "new" ? rows.ideas.find((x) => x.id === (open.idea as Idea).id) ?? null : null;
   const isNew = open?.idea === "new";
   const editing = !!open && (open.edit || isNew) && canEdit;
@@ -307,7 +307,7 @@ function IdeaPanel({
       open={!!open && (isNew || !!live)}
       onClose={onClose}
       variant="panel"
-      title={isNew ? "New idea" : live?.title ?? ""}
+      title={isNew ? voice.ideas.add : live?.title ?? ""}
       actions={!editing && live && canEdit ? <button className="btn btn-sm" onClick={() => onEdit(live)}><Pencil size={14} /> Edit</button> : undefined}
       footer={
         editing ? (
@@ -339,7 +339,7 @@ function IdeaPanel({
 }
 
 function IdeaDetails({ idea, onSchedule }: { idea: Idea; onSchedule: () => void }) {
-  const { rows, me, vote, nameOf, colorOf, canEdit, trip, goingIds, householdOf } = useTrip();
+  const { rows, me, vote, nameOf, colorOf, canEdit, trip, goingIds, householdOf, voice } = useTrip();
   const scores = useIdeaScores();
   const s = scores[idea.id] ?? { up: 0, down: 0, score: 0 };
   const mine = rows.idea_votes.find((v) => v.idea_id === idea.id && v.user_id === me)?.value ?? 0;
@@ -359,7 +359,7 @@ function IdeaDetails({ idea, onSchedule }: { idea: Idea; onSchedule: () => void 
       {idea.description && <p className="detail-notes">{idea.description}</p>}
       <div className="detail-grid">
         <div>
-          <small>Rough cost</small>
+          <small>{voice.ideas.costLabel}</small>
           {idea.est_cost != null ? (
             <>
               {formatMoney(idea.est_cost, trip?.currency)} {idea.cost_unit !== "group" && unitLabel(pickCost(idea))}
@@ -387,7 +387,7 @@ function IdeaDetails({ idea, onSchedule }: { idea: Idea; onSchedule: () => void 
         </div>
       </div>
       {canEdit && idea.status !== "planned" && (
-        <button className="btn btn-primary" style={{ alignSelf: "flex-start" }} onClick={onSchedule}><CalendarPlus size={15} /> Add to itinerary</button>
+        <button className="btn btn-primary" style={{ alignSelf: "flex-start" }} onClick={onSchedule}><CalendarPlus size={15} /> {voice.ideas.schedule}</button>
       )}
       <LinkedMemories type="idea" id={idea.id} />
       <div className="detail-section">
@@ -399,7 +399,7 @@ function IdeaDetails({ idea, onSchedule }: { idea: Idea; onSchedule: () => void 
 }
 
 function IdeaForm({ existing, onDone }: { existing: Idea | null; onDone: () => void }) {
-  const { insert, update, canEdit, trip, me, goingIds, householdOf } = useTrip();
+  const { insert, update, canEdit, trip, me, goingIds, householdOf, voice } = useTrip();
   const [form, setForm] = useState(() =>
     existing
       ? {
@@ -438,11 +438,11 @@ function IdeaForm({ existing, onDone }: { existing: Idea | null; onDone: () => v
     <form id="idea-form" className="form-grid" onSubmit={save}>
           <fieldset disabled={!canEdit} style={{ display: "contents" }}>
             <Field label="What is it?" full>
-              <input className="input" value={form.title} onChange={(e) => set("title", e.target.value)} placeholder="Salem Witch Museum" required maxLength={200} />
+              <input className="input" value={form.title} onChange={(e) => set("title", e.target.value)} placeholder={voice.ideas.titlePlaceholder} required maxLength={200} />
             </Field>
             <Field label="Category">
               <select className="input" value={form.category} onChange={(e) => set("category", e.target.value)}>
-                {CATEGORIES.map((c) => <option key={c.id} value={c.id}>{c.emoji} {c.label}</option>)}
+                {voice.ideaCategories.map((c) => <option key={c.id} value={c.id}>{c.emoji} {c.label}</option>)}
               </select>
             </Field>
             <CostEditor
@@ -451,7 +451,7 @@ function IdeaForm({ existing, onDone }: { existing: Idea | null; onDone: () => v
               participants={goingIds}
               currency={trip?.currency ?? "USD"}
               householdOf={householdOf}
-              label="Rough cost (estimate uses everyone going)"
+              label={`${voice.ideas.costLabel} (estimate uses everyone)`}
             />
             <Field label="Link" full>
               <input className="input" value={form.url} onChange={(e) => set("url", e.target.value)} placeholder="Website, TikTok, Instagram, review…" />
@@ -459,8 +459,8 @@ function IdeaForm({ existing, onDone }: { existing: Idea | null; onDone: () => v
             <Field label="Where" full>
               <PlaceSearch value={form.location} onChange={(p) => set("location", p)} near={near} />
             </Field>
-            <Field label="Why it's worth it" full>
-              <textarea className="input textarea" value={form.description} onChange={(e) => set("description", e.target.value)} placeholder="Notes, opening hours, who recommended it…" />
+            <Field label="About it" full>
+              <textarea className="input textarea" value={form.description} onChange={(e) => set("description", e.target.value)} placeholder={voice.ideas.notesPlaceholder} />
             </Field>
             <Field label="Picture link" hint="Paste an image address to give the card a photo." full>
               <input className="input" value={form.image_url} onChange={(e) => set("image_url", e.target.value)} placeholder="https://…jpg" />
@@ -509,7 +509,7 @@ export function useScheduleIdea() {
 }
 
 export function ScheduleModal({ idea, onClose }: { idea: Idea | null; onClose: () => void }) {
-  const { trip, rows } = useTrip();
+  const { trip, rows, voice } = useTrip();
   const schedule = useScheduleIdea();
   const days = tripDays(trip?.start_date ?? null, trip?.end_date ?? null);
   const [day, setDay] = useState<string>("");
@@ -538,7 +538,7 @@ export function ScheduleModal({ idea, onClose }: { idea: Idea | null; onClose: (
       footer={
         <>
           <button className="btn" onClick={onClose}>Cancel</button>
-          <button className="btn btn-primary" onClick={save} disabled={busy}>Add to itinerary</button>
+          <button className="btn btn-primary" onClick={save} disabled={busy}>{voice.ideas.schedule}</button>
         </>
       }
     >

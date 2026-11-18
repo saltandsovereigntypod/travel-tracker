@@ -16,8 +16,9 @@ import type {
 import type { ListDef, ListItem } from "@/lib/fields";
 import type { Page } from "@/lib/pages";
 import { resolveTheme } from "@/lib/themes";
-import { defaultPageLayout, pageToBoard } from "@/lib/blocks";
+import { defaultPageLayout, isUntouchedTripLayout, pageToBoard } from "@/lib/blocks";
 import { resolveModules, templateFor, type ResolvedModule, type SpaceTemplate } from "@/lib/spaces";
+import { voiceFor, type Voice } from "@/lib/voice";
 
 export type TableName =
   | "ideas" | "idea_votes" | "itinerary_items" | "flights" | "stays" | "expenses"
@@ -124,6 +125,8 @@ interface TripContextValue {
   /** Modules switched on for this space, in nav order. */
   modules: ResolvedModule[];
   hasModule: (id: string) => boolean;
+  /** How this kind of space talks (page hints, buttons, categories). */
+  voice: Voice;
   moduleName: (id: string, fallback?: string) => string;
   template: SpaceTemplate;
   /** "trip", "wedding", "show"… */
@@ -461,9 +464,13 @@ export function TripProvider({ tripId, children }: { tripId: string; children: R
   // Personal view: debounce saves so dragging doesn't spam the database.
   const viewSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingView = useRef<Partial<TripView>>({});
+  const tripKindRef = useRef<string | null>(null);
+  useEffect(() => {
+    tripKindRef.current = trip?.kind ?? null;
+  }, [trip?.kind]);
   const saveView = useCallback(
     (patch: Partial<Omit<TripView, "id" | "trip_id" | "user_id">>) => {
-      setView((v) => ({ ...(v ?? viewRef.current ?? defaultView(tripId, me)), ...patch }) as TripView);
+      setView((v) => ({ ...(v ?? viewRef.current ?? defaultView(tripId, me, tripKindRef.current)), ...patch }) as TripView);
       pendingView.current = { ...pendingView.current, ...patch };
       if (viewSaveTimer.current) clearTimeout(viewSaveTimer.current);
       viewSaveTimer.current = setTimeout(async () => {
@@ -528,22 +535,26 @@ export function TripProvider({ tripId, children }: { tripId: string; children: R
   const modules = useMemo(() => resolveModules(trip), [trip]);
   const template = useMemo(() => templateFor(trip?.kind), [trip?.kind]);
   const hasModule = useCallback((id: string) => modules.some((m) => m.id === id), [modules]);
+  const voice = useMemo(() => voiceFor(trip?.kind), [trip?.kind]);
   const moduleName = useCallback(
     (id: string, fallback?: string) => modules.find((m) => m.id === id)?.name ?? fallback ?? id,
     [modules],
   );
 
+  const tripKind = trip?.kind ?? null;
   const resolvedView = useMemo(() => {
-    const base = defaultView(tripId, me);
+    const base = defaultView(tripId, me, tripKind);
     if (!view) return base;
-    const page = view.page_layout?.length ? view.page_layout : base.page_layout;
+    // A view still on the old trip layout (never customized) gets this kind's own home instead.
+    const untouched = tripKind && tripKind !== "trip" && isUntouchedTripLayout(view.page_layout);
+    const page = view.page_layout?.length && !untouched ? view.page_layout : base.page_layout;
     return {
       ...view,
       theme: resolveTheme(view.theme),
       page_layout: page,
       board_layout: view.board_layout?.length ? view.board_layout : pageToBoard(page),
     };
-  }, [view, tripId, me]);
+  }, [view, tripId, me, tripKind]);
   useEffect(() => {
     viewRef.current = resolvedView;
   }, [resolvedView]);
@@ -553,14 +564,14 @@ export function TripProvider({ tripId, children }: { tripId: string; children: R
     view: resolvedView, setPresencePage, nameOf, colorOf, insert, update, remove, updateTrip,
     saveView, vote, photoUrl, ensurePhotoUrls, reload: load,
     households, householdMembers, householdOf, partyOf, partyName, goingIds, reloadHouseholds,
-    modules, hasModule, moduleName, template, noun: template.noun,
+    modules, hasModule, moduleName, template, noun: template.noun, voice,
   };
 
   return <TripContext.Provider value={value}>{children}</TripContext.Provider>;
 }
 
-function defaultView(tripId: string, me: string): TripView {
-  const page = defaultPageLayout();
+function defaultView(tripId: string, me: string, kind?: string | null): TripView {
+  const page = defaultPageLayout(kind);
   return {
     id: "",
     trip_id: tripId,

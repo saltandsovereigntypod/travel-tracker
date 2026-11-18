@@ -12,7 +12,10 @@ import { CardOptions, useCardParts } from "../ui/CardOptions";
 import { useEngine } from "./engine";
 import { useIsPhone } from "../ui/hooks";
 import { useCommitItem } from "./automation";
-import { itemMoneyTotal, listProgress, statusField, type ListItem } from "@/lib/fields";
+import { cadenceGaps, itemMoneyTotal, listProgress, statusField, type ListItem } from "@/lib/fields";
+import { formatDay, todayString } from "@/lib/format";
+
+const CADENCE_LABEL = { week: "Every week", "2weeks": "Every 2 weeks", month: "Every month" } as const;
 import { dateFields, defaultGroupField, filterItems, groupableFields, placeFields, sortItems } from "@/lib/views";
 import { formatMoney } from "@/lib/format";
 import type { ListPrefs, ListViewType } from "@/lib/types";
@@ -70,6 +73,8 @@ function ListPageInner({ listId }: { listId: string }) {
     const v = view.card_prefs?.[`lists:${listId}`]?.[`f:${f.id}`];
     return typeof v === "boolean" ? v : choices.defaults.has(f.id);
   };
+  const today = todayString();
+  const cadenceFields = list.fields.filter((f) => f.cadence && (f.type === "date" || f.type === "datetime")).map((f) => ({ field: f, gaps: cadenceGaps(all, list, f, today, 6) }));
   const progress = listProgress(list, all);
   const moneyTotal = all.reduce((n, i) => n + (itemMoneyTotal(i, list, money) ?? 0), 0);
   const titleLabel = (list.settings as { titleLabel?: string })?.titleLabel ?? "Name";
@@ -185,6 +190,29 @@ function ListPageInner({ listId }: { listId: string }) {
           </label>
         )}
       </div>
+
+      {cadenceFields.map(({ field: f, gaps }) =>
+        gaps.length ? (
+          <div key={f.id} className="cadence-warn">
+            <span>
+              <strong>{CADENCE_LABEL[f.cadence!]}:</strong> nothing has a {f.name.toLowerCase()} in the {f.cadence === "month" ? "months" : "weeks"} of{" "}
+              {gaps.map((g) => formatDay(g, { weekday: undefined })).join(", ")}.
+            </span>
+            {canEdit && (
+              <button
+                className="btn btn-sm"
+                onClick={async () => {
+                  const last = all[all.length - 1];
+                  const created = await insert("list_items", { list_id: listId, title: `New ${titleLabel.toLowerCase()}`, values: { [f.id]: gaps[0] }, sort_order: (last?.sort_order ?? 0) + 1 });
+                  if (created) setOpen(created.id);
+                }}
+              >
+                <Plus size={14} /> Plan one for {formatDay(gaps[0], { weekday: undefined })}
+              </button>
+            )}
+          </div>
+        ) : null,
+      )}
 
       {canEdit && (
         <form className="quick-add" style={{ marginBottom: "0.9rem" }} onSubmit={add}>

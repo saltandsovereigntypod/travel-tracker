@@ -6,19 +6,48 @@ import { useTrip } from "../TripProvider";
 import { categoryOf } from "@/lib/categories";
 import { assignedTo, calendarEntries, isDone } from "@/lib/fields";
 import { pageTasks } from "@/lib/pages";
-import { addDays, countdown, formatDayLong, formatTime, todayString, tripDays } from "@/lib/format";
+import { addDays, countdown, daysBetween, formatDayLong, formatTime, todayString, tripDays } from "@/lib/format";
 import { mapsLink } from "@/lib/services";
 import { itemsForDay, useFixedEvents } from "./Itinerary";
 import { useIdeaScores } from "./Ideas";
 
 export function Countdown({ big = false }: { big?: boolean }) {
-  const { trip, noun } = useTrip();
+  const { trip, noun, voice, rows } = useTrip();
+  // Ongoing spaces (a show, a home) count down to the next thing with a date instead.
+  if (voice.ongoing && !trip?.start_date) {
+    const today = todayString();
+    const next = [
+      ...calendarEntries({ lists: rows.lists, items: rows.list_items })
+        .filter((c) => c.day >= today && !isDone(c.item, c.list))
+        .map((c) => ({ day: c.day, title: c.item.title || "Untitled", sub: c.field.name })),
+      ...rows.itinerary_items.filter((i) => i.day && i.day >= today).map((i) => ({ day: i.day!, title: i.title, sub: "" })),
+    ].sort((a, b) => a.day.localeCompare(b.day))[0];
+    if (!next) {
+      return (
+        <div style={{ textAlign: "center" }}>
+          <div className="countdown-num" style={big ? { fontSize: "5rem" } : undefined}>✦</div>
+          <div className="muted" style={{ fontWeight: 600 }}>Nothing dated coming up</div>
+        </div>
+      );
+    }
+    const days = daysBetween(today, next.day);
+    return (
+      <div style={{ textAlign: "center" }}>
+        <div className="countdown-num" style={big ? { fontSize: "5rem" } : undefined}>{days === 0 ? "Today" : days}</div>
+        <div className="muted" style={{ fontWeight: 600 }}>
+          {days === 0 ? "" : `day${days === 1 ? "" : "s"} until `}
+          <strong style={{ color: "var(--ink)" }}>{next.title}</strong>
+          {next.sub && <span className="tiny" style={{ display: "block" }}>{next.sub}</span>}
+        </div>
+      </div>
+    );
+  }
   const c = countdown(trip?.start_date ?? null, trip?.end_date ?? null);
   const single = !!trip?.start_date && trip.start_date === trip.end_date;
   const text =
-    c.phase === "before" ? { n: c.days, label: `day${c.days === 1 ? "" : "s"} until the ${noun}` } :
+    c.phase === "before" ? { n: c.days, label: `day${c.days === 1 ? "" : "s"} ${voice.countdown.until(noun)}` } :
     c.phase === "during" ? (single ? { n: "🎉", label: "today's the day!" } : { n: c.days, label: `of ${c.total} · it's happening!` }) :
-    c.phase === "after" ? { n: "♥", label: `what a ${noun}` } : { n: "✦", label: "add a date to count down" };
+    c.phase === "after" ? { n: "♥", label: voice.countdown.after(noun) } : { n: "✦", label: "add a date to count down" };
   return (
     <div style={{ textAlign: "center" }}>
       <div className="countdown-num" style={big ? { fontSize: "5rem" } : undefined}>{text.n}</div>
@@ -29,7 +58,7 @@ export function Countdown({ big = false }: { big?: boolean }) {
 
 /** What's happening today during the trip, or what's coming up before it. */
 export function TodaySection({ compact = false }: { compact?: boolean }) {
-  const { trip, rows, tripId, noun, hasModule, me } = useTrip();
+  const { trip, rows, tripId, noun, hasModule, me, voice } = useTrip();
   const engine = { lists: rows.lists, items: rows.list_items };
   const horizon = addDays(todayString(), 14);
   // To-dos written on pages count too.
@@ -77,7 +106,7 @@ export function TodaySection({ compact = false }: { compact?: boolean }) {
         <div className="section-head" style={{ marginBottom: 0 }}>
           <div>
             <h1>{c.phase === "during" ? "Today" : c.phase === "after" ? `After the ${noun}` : "Up next"}</h1>
-            <p>{c.phase === "during" ? formatDayLong(today) : "A quick look at what needs attention."}</p>
+            <p>{c.phase === "during" ? formatDayLong(today) : voice.today.hint}</p>
           </div>
         </div>
       )}

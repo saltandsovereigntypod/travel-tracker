@@ -1,10 +1,11 @@
 "use client";
 
+import Link from "next/link";
 import { Star, ExternalLink, MapPin } from "lucide-react";
 import { useTrip } from "../TripProvider";
 import { Avatar } from "../ui/Fields";
 import { useEngine } from "./engine";
-import { asDate, asIds, asMoney, asPlace, asRepeat, linkedItems, numericValue, rollupValue, type FieldDef, type ListDef, type ListItem } from "@/lib/fields";
+import { asDate, asIds, asMoney, asPlace, asRepeat, checklistProgress, linkedItems, numericValue, rollupValue, type FieldDef, type ListDef, type ListItem } from "@/lib/fields";
 import { unitLabel } from "@/lib/costs";
 import { formatDay, formatMoney, formatTime, hostname } from "@/lib/format";
 
@@ -18,7 +19,7 @@ export function OptionChip({ label, color }: { label: string; color: string }) {
 
 /** Read-only display of a field value, compact enough for tables and cards. */
 export function FieldValue({ field, item, list, compact }: { field: FieldDef; item: ListItem; list: ListDef; compact?: boolean }) {
-  const { trip, nameOf, colorOf } = useTrip();
+  const { trip, nameOf, colorOf, rows } = useTrip();
   const { ctx, money } = useEngine();
   const v = item.values[field.id];
   const cur = trip?.currency ?? "USD";
@@ -104,6 +105,24 @@ export function FieldValue({ field, item, list, compact }: { field: FieldDef; it
           {linked.length > (compact ? 2 : 6) && <span className="tiny muted">+{linked.length - (compact ? 2 : 6)}</span>}
         </span>
       );
+    }
+    case "checklist": {
+      const { done, total } = checklistProgress(field, v);
+      if (!total) return null;
+      return (
+        <span className="checklist-mini" title={`${done} of ${total} steps done`}>
+          <span className="checklist-bar"><span style={{ width: `${(done / total) * 100}%` }} /></span>
+          <span className="tiny">{done}/{total}</span>
+        </span>
+      );
+    }
+    case "page": {
+      const pg = typeof v === "string" ? rows.pages.find((p) => p.id === v) : undefined;
+      return pg ? (
+        <Link className="link-chip" href={`/trips/${trip?.id}/pages/${pg.id}`} onClick={(e) => e.stopPropagation()}>
+          {pg.icon} {pg.title || "Untitled"}
+        </Link>
+      ) : null;
     }
     case "rollup": {
       const r = rollupValue(item, field, list, ctx, money);

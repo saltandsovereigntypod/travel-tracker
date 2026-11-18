@@ -36,7 +36,7 @@ export const CARD_PARTS = {
     { id: "schedule", label: "Schedule button" },
   ],
   plans: [
-    { id: "fixed", label: "Flights & check-ins on each day" },
+    { id: "fixed", label: "Dates from flights, stays and lists" },
     { id: "place", label: "Place" },
     { id: "distance", label: "Distance from your stay" },
     { id: "price", label: "Price" },

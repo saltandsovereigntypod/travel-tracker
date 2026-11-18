@@ -16,6 +16,9 @@ import { PhotosSection } from "../sections/Photos";
 import { MapSection } from "../sections/MapView";
 import { PeopleSection } from "../sections/People";
 import { Countdown, TodaySection } from "../sections/Today";
+import { NextUpSection } from "../sections/NextUp";
+import { ListEmbed } from "../pages/Embeds";
+import type { ListDef } from "@/lib/fields";
 import { blockMeta } from "@/lib/blocks";
 import { fontCss, readableOn } from "@/lib/themes";
 import { formatRange, hostname } from "@/lib/format";
@@ -67,13 +70,15 @@ export function BlockRenderer({
   /** Board mode: fill the given box and scroll inside it. */
   fill?: boolean;
 }) {
-  const { tripId, moduleName } = useTrip();
+  const { tripId, moduleName, rows } = useTrip();
   const meta = blockMeta(block.type);
   const style = block.style ?? {};
   const isDecor = DECOR.includes(block.type);
   const cardStyle = style.cardStyle ?? (isDecor && block.type !== "text" && block.type !== "quote" ? "none" : undefined);
   const bare = cardStyle === "none";
-  const title = style.title ?? (meta.section && meta.section !== "people" ? moduleName(meta.section, meta.label) : meta.label);
+  // A list block is titled after its list, and links to it.
+  const blockList = block.type === "list" ? listForBlock(rows.lists, block.props) : undefined;
+  const title = style.title ?? (blockList ? `${blockList.icon} ${blockList.name}` : meta.section && meta.section !== "people" ? moduleName(meta.section, meta.label) : meta.label);
   const showTitle = !style.hideTitle && !isDecor && block.type !== "hero" && block.type !== "countdown";
   const cardKind = BLOCK_CARDS[block.type];
 
@@ -100,6 +105,7 @@ export function BlockRenderer({
               </CardBlockScope>
             )}
             {meta.section && <Link href={`/trips/${tripId}/${meta.section}`}>Open →</Link>}
+            {blockList && <Link href={`/trips/${tripId}/lists/${blockList.id}`}>Open →</Link>}
           </div>
         </div>
       )}
@@ -140,6 +146,10 @@ function BlockBody({ block, editing, onProps, fill }: { block: RenderableBlock; 
       return <MapSection compact height={fill ? undefined : 340} />;
     case "people":
       return <PeopleSection compact />;
+    case "nextup":
+      return <NextUpSection limit={p.limit ?? 6} />;
+    case "list":
+      return <ListBlock props={p} onProps={onProps} />;
     case "heading":
       return editing && onProps ? (
         <input className={clsx("inline-edit heading", `h-${size}`)} autoFocus value={p.text ?? ""} onChange={(e) => onProps({ ...p, text: e.target.value })} />
@@ -212,5 +222,24 @@ function Hero() {
         </span>
       </div>
     </div>
+  );
+}
+
+/** The list a block shows: the one picked, or the space's starter list it was made for. */
+function listForBlock(lists: ListDef[], p: BlockProps | undefined): ListDef | undefined {
+  if (!p) return undefined;
+  return lists.find((l) => l.id === p.listId) ?? (p.listTemplate ? lists.find((l) => (l.settings as { template?: string })?.template === p.listTemplate) : undefined);
+}
+
+function ListBlock({ props: p, onProps }: { props: BlockProps; onProps?: (p: BlockProps) => void }) {
+  const { rows, canEdit } = useTrip();
+  const list = listForBlock(rows.lists, p);
+  return (
+    <ListEmbed
+      bare
+      canEdit={canEdit && !!onProps}
+      block={{ id: "block", type: "list", listId: list?.id, view: p.view ?? "cards", mine: p.mine, hideDone: p.hideDone, limit: p.limit ?? 8 }}
+      onChange={(b) => onProps?.({ ...p, listId: b.listId, view: b.view, mine: b.mine, hideDone: b.hideDone })}
+    />
   );
 }
