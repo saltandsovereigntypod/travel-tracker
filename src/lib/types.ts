@@ -383,7 +383,9 @@ export type BlockType =
   | "sticker"
   | "divider"
   | "quote"
-  | "links";
+  | "links"
+  | "list"
+  | "nextup";
 
 export type BlockWidth = "full" | "two-thirds" | "half" | "third";
 
@@ -406,6 +408,12 @@ export interface BlockProps {
   links?: { label: string; url: string }[];
   limit?: number;
   filter?: string;
+  /** list block: which list (or, before it exists, which starter list by template key). */
+  listId?: string;
+  listTemplate?: string;
+  view?: "cards" | "table" | "checklist" | "board";
+  mine?: boolean;
+  hideDone?: boolean;
 }
 
 export interface PageBlock {

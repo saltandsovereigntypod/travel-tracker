@@ -2,18 +2,17 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { Plus, Trash2, Luggage, Lock, Users, Sparkles } from "lucide-react";
+import { Plus, Trash2, Luggage, Lock, Users, Sparkles, ListChecks } from "lucide-react";
 import clsx from "clsx";
 import { useTrip } from "../TripProvider";
 import { ModuleTitle } from "../ModuleTitle";
 import { Avatar, EmptyState, Segmented } from "../ui/Fields";
-import { PACKING_SUGGESTIONS } from "@/lib/categories";
 import type { PackingItem } from "@/lib/types";
 
 type Tab = "shared" | "mine";
 
 export function PackingSection({ compact = false }: { compact?: boolean }) {
-  const { rows, me, canEdit, insert, tripId } = useTrip();
+  const { rows, me, canEdit, insert, tripId, voice } = useTrip();
   const [tab, setTab] = useState<Tab>("shared");
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState("General");
@@ -29,8 +28,9 @@ export function PackingSection({ compact = false }: { compact?: boolean }) {
     [...list].sort((a, b) => Number(a.packed) - Number(b.packed) || a.sort_order - b.sort_order).forEach((p) => (g[p.category] ??= []).push(p));
     return Object.entries(g).sort(([a], [b]) => a.localeCompare(b));
   }, [list]);
-  const categories = [...new Set(["General", ...rows.packing_items.map((p) => p.category), ...Object.keys(PACKING_SUGGESTIONS)])];
+  const categories = [...new Set(["General", ...rows.packing_items.map((p) => p.category), ...Object.keys(voice.checklists.suggestions)])];
   const done = list.filter((p) => p.packed).length;
+  const hasSuggestions = Object.keys(voice.checklists.suggestions).length > 0;
 
   async function add(t: string, cat = category) {
     const v = t.trim();
@@ -44,7 +44,7 @@ export function PackingSection({ compact = false }: { compact?: boolean }) {
         <div className="section-head">
           <div>
             <ModuleTitle id="packing" fallback="Packing" />
-            <p>The shared list is for group stuff (&quot;who&apos;s bringing the speaker?&quot;). Your list is private to you.</p>
+            <p>{voice.checklists.hint}</p>
           </div>
         </div>
       )}
@@ -58,7 +58,7 @@ export function PackingSection({ compact = false }: { compact?: boolean }) {
             { value: "mine", label: <><Lock size={14} /> Mine</>, count: mine.length },
           ]}
         />
-        {list.length > 0 && <span className="small muted">{done}/{list.length} packed</span>}
+        {list.length > 0 && <span className="small muted">{done}/{list.length} {voice.travel ? "packed" : "done"}</span>}
       </div>
       {list.length > 0 && <div className="progress" style={{ marginBottom: "0.8rem" }}><span style={{ width: `${(done / list.length) * 100}%` }} /></div>}
 
@@ -72,7 +72,7 @@ export function PackingSection({ compact = false }: { compact?: boolean }) {
             setTitle("");
           }}
         >
-          <input className="input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder={tab === "mine" ? "Add to my list…" : "Add to the group list…"} />
+          <input className="input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder={tab === "mine" ? voice.checklists.minePlaceholder : voice.checklists.groupPlaceholder} />
           {!compact && (
             <select className="input" style={{ width: 150 }} value={category} onChange={(e) => setCategory(e.target.value)} aria-label="Category">
               {categories.map((c) => <option key={c}>{c}</option>)}
@@ -83,8 +83,8 @@ export function PackingSection({ compact = false }: { compact?: boolean }) {
       )}
 
       {list.length === 0 ? (
-        <EmptyState icon={<Luggage />} title={tab === "mine" ? "Your list is empty" : "No group items yet"}>
-          {canAdd && !compact && (
+        <EmptyState icon={voice.travel ? <Luggage /> : <ListChecks />} title={tab === "mine" ? "Your list is empty" : "No group items yet"}>
+          {canAdd && !compact && hasSuggestions && (
             <button className="btn btn-sm" onClick={() => setShowSuggest(true)}><Sparkles size={14} /> Show suggestions</button>
           )}
         </EmptyState>
@@ -99,14 +99,14 @@ export function PackingSection({ compact = false }: { compact?: boolean }) {
         </div>
       )}
 
-      {!compact && canAdd && list.length > 0 && (
+      {!compact && canAdd && list.length > 0 && hasSuggestions && (
         <button className="btn btn-sm btn-ghost" style={{ marginTop: "1rem" }} onClick={() => setShowSuggest((s) => !s)}>
           <Sparkles size={14} /> {showSuggest ? "Hide" : "Show"} suggestions
         </button>
       )}
       {showSuggest && !compact && (
         <div className="card" style={{ marginTop: "0.8rem" }}>
-          {Object.entries(PACKING_SUGGESTIONS).map(([cat, items]) => (
+          {Object.entries(voice.checklists.suggestions).map(([cat, items]) => (
             <div key={cat} style={{ marginBottom: "0.7rem" }}>
               <strong className="small">{cat}</strong>
               <div className="chip-row" style={{ marginTop: 4 }}>
@@ -129,10 +129,10 @@ export function PackingSection({ compact = false }: { compact?: boolean }) {
 }
 
 function PackRow({ item, editable }: { item: PackingItem; editable: boolean }) {
-  const { update, remove, rows, nameOf, colorOf } = useTrip();
+  const { update, remove, rows, nameOf, colorOf, voice } = useTrip();
   return (
     <div className={clsx("check-row", item.packed && "done")}>
-      <input type="checkbox" checked={item.packed} disabled={!editable} onChange={(e) => update("packing_items", item.id, { packed: e.target.checked })} aria-label={`Packed ${item.title}`} />
+      <input type="checkbox" checked={item.packed} disabled={!editable} onChange={(e) => update("packing_items", item.id, { packed: e.target.checked })} aria-label={`Done: ${item.title}`} />
       <span className="check-title">{item.title}{item.quantity > 1 && <span className="muted"> ×{item.quantity}</span>}</span>
       {item.owner_id === null && (
         editable ? (
@@ -141,7 +141,7 @@ function PackRow({ item, editable }: { item: PackingItem; editable: boolean }) {
             style={{ width: "auto", minHeight: 30, padding: "0 0.4rem", fontSize: "0.8rem" }}
             value={item.assigned_to ?? ""}
             onChange={(e) => update("packing_items", item.id, { assigned_to: e.target.value || null })}
-            aria-label="Who's bringing it"
+            aria-label={voice.checklists.whoBrings}
           >
             <option value="">Anyone</option>
             {rows.trip_members.map((m) => <option key={m.user_id} value={m.user_id}>{nameOf(m.user_id)}</option>)}

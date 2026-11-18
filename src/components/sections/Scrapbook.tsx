@@ -17,7 +17,7 @@ import type { Note, Photo } from "@/lib/types";
 
 /** A keepsake of the trip: designed pages that print exactly as they look. */
 export function ScrapbookSection() {
-  const { trip, rows, me, view, saveView, ensurePhotoUrls, nameOf } = useTrip();
+  const { trip, rows, me, view, saveView, ensurePhotoUrls, nameOf, voice, noun } = useTrip();
   const airports = useAirports();
   const prefs = withDefaults(view.scrapbook);
   const style = styleOf(prefs.style, trip?.kind);
@@ -101,7 +101,7 @@ export function ScrapbookSection() {
       <div className="section-head no-print">
         <div>
           <ModuleTitle id="scrapbook" fallback="Scrapbook" />
-          <p>Your {trip?.kind === "trip" || !trip?.kind ? "trip" : "story"}, laid out like a keepsake book. It fills itself in from plans, journals, notes and photos. Design it your way, then save it as a PDF that looks just like this.</p>
+          <p>Your {noun}, laid out like a keepsake book. It fills itself in from plans, journals, notes and photos. Design it your way, then save it as a PDF that looks just like this.</p>
         </div>
         <div className="toolbar">
           <button className="btn" onClick={() => setDesigning(true)}><Palette size={16} /> Design</button>
@@ -131,11 +131,11 @@ export function ScrapbookSection() {
           {prefs.include.numbers && (
             <Page className="sb-numbers">
               <div className="sb-kicker">By the numbers</div>
-              <h2 className="sb-title">The trip in numbers</h2>
+              <h2 className="sb-title">{voice.scrapbook.numbersTitle(noun)}</h2>
               <div className="sb-numgrid">
                 {[
                   [numbers.days, numbers.days === 1 ? "day" : "days"],
-                  [numbers.nights, numbers.nights === 1 ? "night away" : "nights away"],
+                  ...(voice.travel ? [[numbers.nights, numbers.nights === 1 ? "night away" : "nights away"]] : []),
                   [numbers.plans, numbers.plans === 1 ? "plan" : "plans"],
                   [numbers.places, numbers.places === 1 ? "place" : "places"],
                   [numbers.photos, numbers.photos === 1 ? "photo" : "photos"],
@@ -379,7 +379,7 @@ function SbPhoto({ photo, i, curating, hidden, onToggle }: { photo: Photo; i: nu
 // ---------------------------------------------------------------- design panel
 
 function DesignPanel({ open, onClose, prefs: raw, setPrefs, photos, coverId }: { open: boolean; onClose: () => void; prefs: ScrapbookPrefs; setPrefs: (p: Partial<ScrapbookPrefs>) => void; photos: Photo[]; coverId: string | null }) {
-  const { trip, photoUrl, ensurePhotoUrls } = useTrip();
+  const { trip, photoUrl, ensurePhotoUrls, voice, noun } = useTrip();
   const prefs = withDefaults(raw);
   const coverChoices = [...photos].sort((a, b) => Number(b.favorite) - Number(a.favorite)).slice(0, 24);
   const paths = coverChoices.map((p) => p.storage_path).join("|");
@@ -411,7 +411,7 @@ function DesignPanel({ open, onClose, prefs: raw, setPrefs, photos, coverId }: {
           </div>
         </div>
         <Field label="Chapters">
-          <Segmented<"day" | "stay"> size="sm" value={prefs.chapters} onChange={(v) => setPrefs({ chapters: v })} options={[{ value: "day", label: "One per day" }, { value: "stay", label: "One per stay" }]} />
+          <Segmented<"day" | "stay"> size="sm" value={prefs.chapters} onChange={(v) => setPrefs({ chapters: v })} options={[{ value: "day", label: "One per day" }, ...(voice.scrapbook.chapterByStay ? [{ value: "stay" as const, label: "One per stay" }] : [])]} />
         </Field>
         <Field label="Page size (for the PDF too)">
           <Segmented<PageSize> size="sm" value={prefs.pageSize} onChange={(v) => setPrefs({ pageSize: v })} options={[{ value: "letter", label: "Letter" }, { value: "a4", label: "A4" }, { value: "square", label: "Square" }]} />
@@ -430,7 +430,7 @@ function DesignPanel({ open, onClose, prefs: raw, setPrefs, photos, coverId }: {
               <span>Only favorite photos</span>
               <input type="checkbox" role="switch" className="switch" checked={prefs.favoritesOnly} onChange={(e) => setPrefs({ favoritesOnly: e.target.checked })} />
             </label>
-            {sw("numbers", "The trip in numbers page")}
+            {sw("numbers", `${voice.scrapbook.numbersTitle(noun)} page`)}
             {sw("favorites", "Favorites page")}
             {sw("people", "“With love” page")}
             {sw("privateToo", "Include things not everyone can see", "Off by default, so your PDF is safe to share.")}

@@ -8,9 +8,12 @@ import { Modal } from "../ui/Modal";
 import { Field } from "../ui/Fields";
 import { useEngine } from "./engine";
 import {
-  FIELD_TYPES, OPTION_COLORS, fid, fieldTypeMeta, linkPaths, linkTarget, newField,
-  type FieldDef, type FieldOption, type FieldType, type ListDef, type OptionKind, type RollupOp,
+  FIELD_TYPES, OPTION_COLORS, fid, fieldTypeMeta, linkPaths, linkTarget, newField, stepsFromText, stepsToText,
+  type Cadence, type FieldDef, type FieldOption, type FieldType, type ListDef, type OptionKind, type RollupOp,
 } from "@/lib/fields";
+import { useToast } from "../ui/Toast";
+import { LIST_TEMPLATES, buildLists } from "@/lib/list-templates";
+import { PAGE_TEMPLATES } from "@/lib/page-templates";
 
 const ROLLUP_OPS: { op: RollupOp; label: string; needs: "none" | "number" | "date" | "done" }[] = [
   { op: "count", label: "Count linked items", needs: "none" },
@@ -30,6 +33,7 @@ export function ListSettings({ list, open, onClose }: { list: ListDef; open: boo
   const router = useRouter();
   const [adding, setAdding] = useState(false);
   const [openField, setOpenField] = useState<string | null>(null);
+  const templateKey = (list.settings as { template?: string })?.template;
 
   const saveFields = (fields: FieldDef[]) => update("lists", list.id, { fields });
   const patchField = (id: string, p: Partial<FieldDef>) => saveFields(list.fields.map((f) => (f.id === id ? { ...f, ...p } : f)));
@@ -84,6 +88,8 @@ export function ListSettings({ list, open, onClose }: { list: ListDef; open: boo
             When an item is marked done, record its payment automatically
           </label>
         )}
+
+        {templateKey && canEdit && <TemplateUpdate list={list} templateKey={templateKey} />}
 
         <h3 style={{ margin: "1.2rem 0 0.6rem" }}>Fields</h3>
         <div className="stack" style={{ gap: 6 }}>
@@ -235,7 +241,37 @@ function FieldOptions({ field, list, onPatch, onDelete }: { field: FieldDef; lis
         </>
       )}
       {(field.type === "date" || field.type === "datetime") && (
-        <label className="row small"><input type="checkbox" checked={field.feeds?.calendar !== false} onChange={(e) => onPatch({ feeds: { ...field.feeds, calendar: e.target.checked } })} /> Show on the calendar</label>
+        <>
+          <label className="row small"><input type="checkbox" checked={field.feeds?.calendar !== false} onChange={(e) => onPatch({ feeds: { ...field.feeds, calendar: e.target.checked } })} /> Show on the calendar</label>
+          <Field label="How often do you expect one?" hint="Flags the weeks or months with nothing scheduled, e.g. a weekly release.">
+            <select className="input" value={field.cadence ?? ""} onChange={(e) => onPatch({ cadence: (e.target.value || undefined) as Cadence | undefined })}>
+              <option value="">No set rhythm</option>
+              <option value="week">Every week</option>
+              <option value="2weeks">Every 2 weeks</option>
+              <option value="month">Every month</option>
+            </select>
+          </Field>
+        </>
+      )}
+      {field.type === "checklist" && (
+        <>
+          <Field label="Steps" hint="One step per line. Start a line with # to begin a stage, e.g. “# Recorded”. Every item gets these steps.">
+            <textarea className="input textarea" rows={8} defaultValue={stepsToText(field.steps ?? [])} onBlur={(e) => onPatch({ steps: stepsFromText(e.target.value, field.steps ?? []) })} placeholder={"# Written\nResearch\nOutline\n# Recorded\nRecord\nBack up files"} />
+          </Field>
+          {list.fields.some((f) => f.type === "status") && (
+            <label className="row small">
+              <input type="checkbox" checked={!!field.autoAdvance} onChange={(e) => onPatch({ autoAdvance: e.target.checked })} />
+              When a stage&apos;s steps are all ticked, move the status to that stage (stages match statuses by name)
+            </label>
+          )}
+        </>
+      )}
+      {field.type === "page" && (
+        <Field label="New pages start from">
+          <select className="input" value={field.pageTemplate ?? "blank"} onChange={(e) => onPatch({ pageTemplate: e.target.value })}>
+            {PAGE_TEMPLATES.map((t) => <option key={t.key} value={t.key}>{t.icon} {t.name}</option>)}
+          </select>
+        </Field>
       )}
       {field.type === "place" && (
         <label className="row small"><input type="checkbox" checked={field.feeds?.map !== false} onChange={(e) => onPatch({ feeds: { ...field.feeds, map: e.target.checked } })} /> Pin on the map</label>
@@ -281,6 +317,34 @@ function OptionsEditor({ field, onChange }: { field: FieldDef; onChange: (o: Fie
         <button className="btn btn-sm" disabled={!label.trim()}><Plus size={14} /></button>
       </form>
       {field.type === "status" && <span className="tiny muted">&quot;Done&quot; choices count toward progress; &quot;Cancelled&quot; ones drop out of the budget and calendar.</span>}
+    </div>
+  );
+}
+
+/** Lists made from a template can pick up fields the template has gained since (nothing is removed). */
+function TemplateUpdate({ list, templateKey }: { list: ListDef; templateKey: string }) {
+  const { rows, update, tripId } = useTrip();
+  const toast = useToast();
+  const tpl = LIST_TEMPLATES.find((t) => t.key === templateKey);
+  if (!tpl) return null;
+  const fresh = buildLists([templateKey], tripId, rows.lists.filter((l) => l.id !== list.id))[0];
+  const missing = fresh.fields.filter((f) => !list.fields.some((x) => x.id === f.id || x.name.trim().toLowerCase() === f.name.trim().toLowerCase()));
+  if (!missing.length) return null;
+  return (
+    <div className="template-update">
+      <span className="small">
+        The {tpl.name} template has {missing.length} newer field{missing.length === 1 ? "" : "s"}: {missing.map((f) => f.name).join(", ")}.
+      </span>
+      <button
+        type="button"
+        className="btn btn-sm"
+        onClick={async () => {
+          await update("lists", list.id, { fields: [...list.fields, ...missing] });
+          toast.success(`Added ${missing.length} field${missing.length === 1 ? "" : "s"}. Nothing you had was changed.`);
+        }}
+      >
+        Add {missing.length === 1 ? "it" : "them"}
+      </button>
     </div>
   );
 }

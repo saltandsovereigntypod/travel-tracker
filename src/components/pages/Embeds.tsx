@@ -23,7 +23,7 @@ import type { BlockType } from "@/lib/types";
 type Change = (b: DocBlock) => void;
 
 // ---------------------------------------------------------------- list view
-export function ListEmbed({ block, onChange, canEdit }: { block: DocBlock; onChange: Change; canEdit: boolean }) {
+export function ListEmbed({ block, onChange, canEdit, bare }: { block: DocBlock; onChange: Change; canEdit: boolean; bare?: boolean }) {
   const { rows, me, insert } = useTrip();
   const commit = useCommitItem();
   const [open, setOpen] = useState<string | null>(null);
@@ -90,12 +90,16 @@ export function ListEmbed({ block, onChange, canEdit }: { block: DocBlock; onCha
   }
 
   return (
-    <div className="doc-embed">
+    <div className={bare ? "list-block" : "doc-embed"}>
       <div className="doc-embed-head">
-        <Link href={`/trips/${list.trip_id}/lists/${list.id}`} className="row doc-embed-title">
-          <span aria-hidden>{list.icon}</span> {list.name}
-          <span className="tiny muted">{items.length}</span>
-        </Link>
+        {bare ? (
+          <span className="tiny muted">{items.length} {items.length === 1 ? "item" : "items"}</span>
+        ) : (
+          <Link href={`/trips/${list.trip_id}/lists/${list.id}`} className="row doc-embed-title">
+            <span aria-hidden>{list.icon}</span> {list.name}
+            <span className="tiny muted">{items.length}</span>
+          </Link>
+        )}
         {canEdit && (
           <div className="row wrap doc-embed-controls" style={{ gap: 6 }}>
             <Segmented<EmbedView>

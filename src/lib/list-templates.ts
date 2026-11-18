@@ -2,7 +2,7 @@
 // and every field can be changed afterwards.
 
 import type { FieldDef, FieldOption, FieldType, ListDef, OptionKind } from "./fields";
-import { defaultStatusOptions } from "./fields";
+import { defaultStatusOptions, stepsFromText } from "./fields";
 
 interface TplField {
   key: string;
@@ -14,6 +14,14 @@ interface TplField {
   rollup?: FieldDef["rollup"];
   feeds?: FieldDef["feeds"];
   moneyKind?: FieldDef["moneyKind"];
+  /** checklist: steps, one per line; "# Stage" lines start a stage. */
+  steps?: string;
+  autoAdvance?: boolean;
+  cadence?: FieldDef["cadence"];
+  pageTemplate?: string;
+  /** rollup over a link: "own:<fieldKey>" or "back:<listKey>:<fieldKey>". */
+  rollupVia?: string;
+  rollupOp?: NonNullable<FieldDef["rollup"]>["op"];
 }
 
 export interface ListTemplate {
@@ -91,14 +99,22 @@ export const LIST_TEMPLATES: ListTemplate[] = [
     key: "episodes",
     name: "Episodes",
     icon: "🎧",
-    description: "From idea to published: guests, recording and release dates",
+    description: "From idea to published: stages, production steps, guests, sponsors and release dates",
     titleLabel: "Episode",
     fields: [
       { key: "number", name: "Episode #", type: "number" },
-      { key: "status", name: "Status", type: "status", options: status(["Idea", "todo"], ["Scheduled", "doing"], ["Recorded", "doing"], ["Editing", "doing"], ["Published", "done"], ["Shelved", "cancelled"]) },
+      { key: "status", name: "Stage", type: "status", options: status(["Idea", "todo"], ["Written", "doing"], ["Recorded", "doing"], ["Edited", "doing"], ["Published", "done"], ["Shelved", "cancelled"]) },
+      { key: "release", name: "Release date", type: "date", cadence: "week" },
+      { key: "record", name: "Recording session", type: "datetime" },
       { key: "guests", name: "Guests", type: "relation", linkTo: "podcast_guests" },
-      { key: "record", name: "Recording", type: "datetime" },
-      { key: "release", name: "Release date", type: "date" },
+      {
+        key: "production",
+        name: "Production",
+        type: "checklist",
+        autoAdvance: true,
+        steps: "# Written\nResearch the topic\nOutline or script\nPrep questions\n# Recorded\nTest mics and levels\nRecord\nBack up the raw files\n# Edited\nEdit\nMix and master\nExport the final audio\n# Published\nWrite show notes\nMake the episode artwork\nUpload and schedule\nShare clips",
+      },
+      { key: "shownotes", name: "Show notes", type: "page", pageTemplate: "outline" },
       { key: "host", name: "Hosts", type: "people" },
       { key: "editor", name: "Editor", type: "person" },
       { key: "topic", name: "Topic & notes", type: "longtext" },
@@ -108,29 +124,42 @@ export const LIST_TEMPLATES: ListTemplate[] = [
     key: "podcast_guests",
     name: "Guests",
     icon: "🎤",
-    description: "Who you're booking, their topics and contact info",
+    description: "From asked to thanked: contact info, prep and their episodes",
     titleLabel: "Guest",
     fields: [
-      { key: "status", name: "Status", type: "status", options: status(["Pitched", "todo"], ["Confirmed", "doing"], ["Recorded", "done"], ["Declined", "cancelled"]) },
+      { key: "status", name: "Status", type: "status", options: status(["Asked", "todo"], ["Confirmed", "doing"], ["Recorded", "doing"], ["Thanked", "done"], ["Declined", "cancelled"]) },
       { key: "topic", name: "Topic", type: "text" },
       { key: "email", name: "Email", type: "email" },
+      { key: "phone", name: "Phone", type: "phone" },
       { key: "socials", name: "Website / socials", type: "url" },
+      {
+        key: "prep",
+        name: "Guest steps",
+        type: "checklist",
+        autoAdvance: true,
+        steps: "# Confirmed\nSend the prep sheet\nSchedule the recording\n# Recorded\nRecord the episode\n# Thanked\nSend a thank-you\nShare the episode with them",
+      },
+      { key: "episodes_count", name: "Episodes", type: "rollup", rollupVia: "back:episodes:guests", rollupOp: "count" },
     ],
   },
   {
     key: "sponsors",
     name: "Sponsors",
     icon: "💸",
-    description: "Deals, amounts and deliverables",
+    description: "Deals, ad reads promised, booked and aired, and the money in",
     titleLabel: "Sponsor",
     fields: [
-      { key: "status", name: "Status", type: "status", options: status(["Prospect", "todo"], ["Negotiating", "doing"], ["Signed", "done"], ["Lost", "cancelled"]) },
+      { key: "status", name: "Status", type: "status", options: status(["Prospect", "todo"], ["Pitched", "doing"], ["Negotiating", "doing"], ["Signed", "doing"], ["Paid", "done"], ["Lost", "cancelled"]) },
+      { key: "deal", name: "Deal type", type: "select", options: [["Per episode"], ["Per ad read"], ["Flat deal"]] },
       // Sponsor money is income: it shows as money coming in, not spending.
       { key: "amount", name: "Deal amount", type: "money", moneyKind: "income" },
+      { key: "reads", name: "Reads promised", type: "number" },
+      { key: "episodes", name: "Episodes", type: "relation", linkTo: "episodes" },
+      { key: "booked", name: "Reads booked", type: "rollup", rollupVia: "own:episodes", rollupOp: "count" },
+      { key: "aired", name: "Reads aired", type: "rollup", rollupVia: "own:episodes", rollupOp: "checked" },
       { key: "due", name: "Invoice due", type: "date" },
       { key: "contact", name: "Contact", type: "text" },
       { key: "email", name: "Email", type: "email" },
-      { key: "episodes", name: "Episodes", type: "relation", linkTo: "episodes" },
     ],
   },
   {
@@ -280,6 +309,15 @@ export function buildLists(
         if (f.feeds) def.feeds = f.feeds;
         if (f.moneyKind) def.moneyKind = f.moneyKind;
         if (f.rollup) def.rollup = f.rollup;
+        if (f.steps) def.steps = stepsFromText(f.steps);
+        if (f.autoAdvance) def.autoAdvance = true;
+        if (f.cadence) def.cadence = f.cadence;
+        if (f.pageTemplate) def.pageTemplate = f.pageTemplate;
+        if (f.rollupVia) {
+          const [kind, a, b] = f.rollupVia.split(":");
+          const via = kind === "own" ? a : ids[a] ? `back:${ids[a]}:${b}` : "";
+          def.rollup = { via, op: f.rollupOp ?? "count" };
+        }
         return def;
       });
     return {

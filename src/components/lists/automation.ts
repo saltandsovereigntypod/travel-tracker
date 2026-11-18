@@ -4,7 +4,7 @@ import { useCallback } from "react";
 import { useTrip } from "../TripProvider";
 import { useToast } from "../ui/Toast";
 import { useMoney } from "../sections/money";
-import { advanceRecurring, asIds, isDone, itemPeople, type ListDef, type ListItem } from "@/lib/fields";
+import { advanceByChecklist, advanceRecurring, asIds, isDone, itemPeople, statusField, type ListDef, type ListItem } from "@/lib/fields";
 import { formatDay, formatMoney, todayString } from "@/lib/format";
 
 /**
@@ -19,7 +19,15 @@ export function useCommitItem() {
   const cur = trip?.currency ?? "USD";
 
   return useCallback(
-    async (list: ListDef, item: ListItem, values: Record<string, unknown>) => {
+    async (list: ListDef, item: ListItem, valuesIn: Record<string, unknown>) => {
+      // Finishing a stage's checklist steps moves the item to that stage.
+      const advanced = advanceByChecklist(list, valuesIn);
+      const values = advanced ?? valuesIn;
+      if (advanced) {
+        const sf = statusField(list);
+        const label = sf?.options?.find((o) => o.id === advanced[sf.id])?.label;
+        if (label) toast.success(`${item.title || "Item"} moved to ${label}`);
+      }
       const before = isDone(item, list);
       const after = isDone({ ...item, values }, list);
       if (before || !after) {

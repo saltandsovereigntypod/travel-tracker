@@ -1,6 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
+import { useCreatePage } from "../pages/usePageDoc";
+import { PAGE_TEMPLATES } from "@/lib/page-templates";
 import { Star, Plus, X, Search } from "lucide-react";
 import clsx from "clsx";
 import { useTrip } from "../TripProvider";
@@ -156,6 +159,10 @@ export function FieldInput({
       return <RelationInput field={field} item={item} disabled={disabled} onChange={onChange} />;
     case "rollup":
       return null;
+    case "checklist":
+      return <ChecklistInput field={field} value={v} disabled={disabled} onChange={onChange} />;
+    case "page":
+      return <PageInput field={field} item={item} list={list} disabled={disabled} onChange={onChange} />;
     case "repeat": {
       const r = asRepeat(v);
       const preset = !r ? "" : `${r.freq}:${r.interval}`;
@@ -392,6 +399,86 @@ export function LinkPicker({ targetName, options, selected, onToggle, onCreate, 
           </div>
           <button type="button" className="btn btn-sm btn-ghost" style={{ alignSelf: "flex-start" }} onClick={() => setOpen(false)}>Done</button>
         </div>
+      )}
+    </div>
+  );
+}
+
+/** Steps grouped by stage, ticked off as you go. */
+function ChecklistInput({ field, value, disabled, onChange }: { field: FieldDef; value: unknown; disabled?: boolean; onChange: (v: unknown) => void }) {
+  const done = new Set(asIds(value));
+  const steps = field.steps ?? [];
+  if (!steps.length) return <span className="tiny muted">No steps yet. Add them in this list&apos;s field settings.</span>;
+  const stages = [...new Set(steps.map((s) => s.stage ?? ""))];
+  return (
+    <div className="checklist-input">
+      {stages.map((stage) => {
+        const inStage = steps.filter((s) => (s.stage ?? "") === stage);
+        const n = inStage.filter((s) => done.has(s.id)).length;
+        return (
+          <div key={stage || "steps"} className="checklist-stage">
+            {stage && <div className="checklist-stage-head"><strong className="small">{stage}</strong><span className="tiny muted">{n}/{inStage.length}</span></div>}
+            {inStage.map((st) => (
+              <label key={st.id} className={clsx("checklist-step", done.has(st.id) && "done")}>
+                <input
+                  type="checkbox"
+                  checked={done.has(st.id)}
+                  disabled={disabled}
+                  onChange={(e) => {
+                    const next = new Set(done);
+                    if (e.target.checked) next.add(st.id);
+                    else next.delete(st.id);
+                    onChange(steps.filter((x) => next.has(x.id)).map((x) => x.id));
+                  }}
+                />
+                <span>{st.label}</span>
+              </label>
+            ))}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/** A page of its own for this item (show notes, a run of show…): pick one or make it from a template. */
+function PageInput({ field, item, list, disabled, onChange }: { field: FieldDef; item: ListItem; list: ListDef; disabled?: boolean; onChange: (v: unknown) => void }) {
+  const { rows, tripId } = useTrip();
+  const createPage = useCreatePage();
+  const [busy, setBusy] = useState(false);
+  const id = typeof item.values[field.id] === "string" ? (item.values[field.id] as string) : null;
+  const page = id ? rows.pages.find((p) => p.id === id) : undefined;
+  if (page) {
+    return (
+      <div className="row wrap" style={{ gap: 6 }}>
+        <Link className="chip chip-2" href={`/trips/${tripId}/pages/${page.id}`}>{page.icon} {page.title || "Untitled"}</Link>
+        {!disabled && <button type="button" className="btn btn-sm btn-ghost" onClick={() => onChange(null)}>Unlink</button>}
+      </div>
+    );
+  }
+  if (disabled) return <span className="tiny muted">No page yet</span>;
+  const tpl = PAGE_TEMPLATES.find((t) => t.key === (field.pageTemplate ?? "blank")) ?? PAGE_TEMPLATES[0];
+  return (
+    <div className="row wrap" style={{ gap: 6 }}>
+      <button
+        type="button"
+        className="btn btn-sm"
+        disabled={busy}
+        onClick={async () => {
+          setBusy(true);
+          const title = `${item.title || (list.settings as { titleLabel?: string })?.titleLabel || "Untitled"}: ${field.name}`;
+          const p = await createPage(null, { title, icon: tpl.icon, blocks: tpl.blocks() }, { open: false, linkInParent: false });
+          setBusy(false);
+          if (p) onChange(p.id);
+        }}
+      >
+        <Plus size={14} /> New {tpl.key === "blank" ? "page" : tpl.name.toLowerCase()}
+      </button>
+      {rows.pages.length > 0 && (
+        <select className="input" style={{ width: "auto", flex: "1 1 160px" }} value="" onChange={(e) => e.target.value && onChange(e.target.value)} aria-label="Link an existing page">
+          <option value="">…or link an existing page</option>
+          {rows.pages.map((p) => <option key={p.id} value={p.id}>{p.icon} {p.title || "Untitled"}</option>)}
+        </select>
       )}
     </div>
   );

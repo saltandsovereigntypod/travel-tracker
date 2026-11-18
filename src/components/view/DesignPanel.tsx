@@ -193,7 +193,7 @@ function ThemeTab() {
       </section>
       <section>
         <h4>My cover photo</h4>
-        <p className="tiny muted" style={{ marginBottom: 6 }}>Shows in your trip header. Doesn&apos;t change anyone else&apos;s.</p>
+        <p className="tiny muted" style={{ marginBottom: 6 }}>Shows in your header. Doesn&apos;t change anyone else&apos;s.</p>
         <div className="row">
           <label className="btn btn-sm">
             {uploading === "cover" ? <Loader2 size={14} className="spin" /> : <Upload size={14} />} Upload
@@ -453,7 +453,7 @@ function LinksEditor({ links, onChange }: { links: { label: string; url: string 
 }
 
 function TemplatesTab({ onApply }: { onApply: (t: Pick<Template, "theme" | "page_layout" | "board_layout">) => void }) {
-  const { view } = useTrip();
+  const { view, trip, template } = useTrip();
   const { user } = useAuth();
   const toast = useToast();
   const [list, setList] = useState<Template[] | null>(null);
@@ -532,10 +532,15 @@ function TemplatesTab({ onApply }: { onApply: (t: Pick<Template, "theme" | "page
       <section>
         <h4>Start over</h4>
         <button className="btn btn-sm" onClick={() => {
+          if (!confirm(`Switch to the ${template.name.toLowerCase()} home layout? Your theme stays as it is.`)) return;
+          const page = defaultPageLayout(trip?.kind);
+          onApply({ theme: view.theme, page_layout: page, board_layout: pageToBoard(page) });
+        }}><RotateCcw size={14} /> Use the {template.name.toLowerCase()} home layout</button>
+        <button className="btn btn-sm btn-ghost" onClick={() => {
           if (!confirm("Reset your view to the default layout and theme?")) return;
-          const page = defaultPageLayout();
+          const page = defaultPageLayout(trip?.kind);
           onApply({ theme: DEFAULT_THEME, page_layout: page, board_layout: pageToBoard(page) });
-        }}><RotateCcw size={14} /> Reset my view</button>
+        }}><RotateCcw size={14} /> Reset everything</button>
       </section>
     </>
   );

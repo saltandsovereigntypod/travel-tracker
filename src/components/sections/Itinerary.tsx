@@ -6,7 +6,7 @@ import {
   DndContext, DragOverlay, PointerSensor, TouchSensor, KeyboardSensor, useDraggable, useDroppable, useSensor, useSensors,
   type DragEndEvent, type DragStartEvent,
 } from "@dnd-kit/core";
-import { Plus, Plane, BedDouble, MapPin, ExternalLink, Trash2, CalendarDays, Clock, MessageCircle, Pencil } from "lucide-react";
+import { Plus, Plane, BedDouble, MapPin, ExternalLink, Trash2, CalendarDays, Clock, MessageCircle, Pencil, Undo2 } from "lucide-react";
 import clsx from "clsx";
 import { LinkedMemories } from "../memories/Memories";
 import { useTrip } from "../TripProvider";
@@ -15,13 +15,13 @@ import { Modal } from "../ui/Modal";
 import { Avatar, EmptyState, Field, PersonPicker, PlaceSearch, Segmented } from "../ui/Fields";
 import { CostEditor, costColumns, costValueFrom, type CostValue } from "../ui/CostEditor";
 import { PaymentPanel, PayStatus } from "./Payments";
-import { ScheduleModal, useIdeaScores, useScheduleIdea } from "./Ideas";
+import { ScheduleModal, useBackToIdeas, useIdeaScores, useScheduleIdea } from "./Ideas";
 import { Lightbulb, ThumbsUp } from "lucide-react";
 import type { Idea } from "@/lib/types";
 import { useMoney } from "./money";
 import { CommentThread, useCommentCount } from "./Comments";
-import { CATEGORIES, categoryOf } from "@/lib/categories";
-import { formatDay, formatMoney, formatTime, hostname, normalizeUrl, splitLocal, todayString, tripDays } from "@/lib/format";
+import { categoryOf } from "@/lib/categories";
+import { addDays, daysBetween, formatDay, formatMoney, formatTime, hostname, normalizeUrl, splitLocal, todayString, tripDays } from "@/lib/format";
 import { mapsLink } from "@/lib/services";
 import type { ItineraryItem, Place } from "@/lib/types";
 
@@ -115,9 +115,16 @@ export function ItinerarySection({ compact = false }: { compact?: boolean }) {
     useSensor(KeyboardSensor),
   );
 
-  const days = tripDays(trip?.start_date ?? null, trip?.end_date ?? null);
+  const { voice } = useTrip();
+  const [showPast, setShowPast] = useState(false);
+  const today0 = todayString();
+  // Ongoing spaces (a show, a home) without dates get a rolling two weeks from today.
+  const rolling = voice.ongoing && !trip?.start_date;
+  const days = rolling ? Array.from({ length: 14 }, (_, i) => addDays(today0, i)) : tripDays(trip?.start_date ?? null, trip?.end_date ?? null);
   // Days outside the space's range that still have something on them (plans, flights, list dates…).
-  const outside = [...new Set([...rows.itinerary_items.map((i) => i.day), ...Object.keys(fixed)].filter((d): d is string => !!d && !days.includes(d)))].sort();
+  const contentDays = [...new Set([...rows.itinerary_items.map((i) => i.day), ...Object.keys(fixed)].filter((d): d is string => !!d && !days.includes(d)))].sort();
+  const pastCount = rolling ? contentDays.filter((d) => d < today0).length : 0;
+  const outside = rolling && !showPast ? contentDays.filter((d) => d >= today0) : contentDays;
   // Trip-style spaces show every day in their range; any other dated plans slot in chronologically.
   const allDays = [...days, ...outside].sort();
   const unscheduled = itemsForDay(rows.itinerary_items, null);
@@ -183,9 +190,8 @@ export function ItinerarySection({ compact = false }: { compact?: boolean }) {
           <div>
             <ModuleTitle id="itinerary" fallback="Itinerary" />
             <p>
-              <span className="hide-phone">Drag plans between days. </span>
-              <span className="show-phone">Tap a plan to edit it or change its day. </span>
-              Flights and stays appear on their dates automatically.
+              <span className="hide-phone">{voice.calendar.hint}</span>
+              <span className="show-phone">{voice.calendar.hint.replace(/^Drag [^.]*\. ?/, "")} Tap anything to open it.</span>
             </p>
           </div>
           <div className="toolbar">
@@ -203,23 +209,28 @@ export function ItinerarySection({ compact = false }: { compact?: boolean }) {
             <CardOptions kind="plans" title="Plan cards" />
             {canEdit && (
               <button className="btn btn-primary" onClick={() => setEditing({ day: null })}>
-                <Plus size={16} /> Add plan
+                <Plus size={16} /> {voice.calendar.add}
               </button>
             )}
           </div>
         </div>
       )}
 
-      {!days.length && !compact && (
+      {!days.length && !compact && voice.calendar.noDates && (
         <div className="card" style={{ marginBottom: "1rem" }}>
           <p>
-            <strong>Add dates</strong> to get a day-by-day plan, or just add plans with any date.{" "}
+            {voice.calendar.noDates}{" "}
             <Link href={`/trips/${tripId}/settings`} style={{ color: "var(--accent)" }}>Settings →</Link>
           </p>
         </div>
       )}
+      {rolling && !compact && pastCount > 0 && (
+        <button className="btn btn-sm btn-ghost" style={{ marginBottom: "0.8rem" }} onClick={() => setShowPast((v) => !v)}>
+          {showPast ? "Hide earlier days" : `Show ${pastCount} earlier day${pastCount === 1 ? "" : "s"}`}
+        </button>
+      )}
 
-      {!compact && days.length > 3 && (
+      {!compact && !rolling && days.length > 3 && (
         <nav className="day-jump" aria-label="Jump to day">
           {days.map((d, i) => (
             <button
@@ -235,8 +246,8 @@ export function ItinerarySection({ compact = false }: { compact?: boolean }) {
       )}
 
       {compact && visibleDays.length === 0 && unscheduled.length === 0 ? (
-        <EmptyState icon={<CalendarDays />} title="Nothing planned yet">
-          <Link href={`/trips/${tripId}/itinerary`} style={{ color: "var(--accent)" }}>Open the itinerary</Link>
+        <EmptyState icon={<CalendarDays />} title={voice.calendar.empty}>
+          <Link href={`/trips/${tripId}/itinerary`} style={{ color: "var(--accent)" }}>Open the calendar</Link>
         </EmptyState>
       ) : (
         <DndContext sensors={sensors} onDragStart={onDragStart} onDragEnd={onDragEnd} onDragCancel={() => setDragging(null)}>
@@ -290,7 +301,8 @@ function DayColumn({
   onOpen: (i: ItineraryItem) => void;
   onAdd: () => void;
 }) {
-  const { canEdit, insert } = useTrip();
+  const { canEdit, insert, voice, trip } = useTrip();
+  const rolling = voice.ongoing && !trip?.start_date;
   const { setNodeRef, isOver } = useDroppable({ id: `day:${day ?? UNSCHEDULED}` });
   const [quick, setQuick] = useState("");
 
@@ -312,11 +324,11 @@ function DayColumn({
     <section id={day ? `day-${day}` : "day-unscheduled"} className={clsx("card day-col", compact && "card-tight")} style={isToday ? { outline: "2px solid var(--accent)" } : undefined}>
       <div className="day-head">
         <div>
-          <div className="day-num">{day ? (index >= 0 ? `Day ${index + 1}` : parseMonth(day)) : "Unscheduled"}{isToday && " · Today"}</div>
-          <h3>{day ? formatDay(day, { weekday: "long" }) : "Someday / not sure yet"}</h3>
+          <div className="day-num">{day ? (rolling ? relativeDay(day) : index >= 0 ? `Day ${index + 1}` : parseMonth(day)) : voice.calendar.unscheduledKicker}{isToday && !rolling && " · Today"}</div>
+          <h3>{day ? formatDay(day, { weekday: "long" }) : voice.calendar.unscheduledTitle}</h3>
         </div>
         {canEdit && !compact && (
-          <button className="icon-btn" onClick={onAdd} aria-label="Add plan to this day">
+          <button className="icon-btn" onClick={onAdd} aria-label={`Add to this day`}>
             <Plus size={18} />
           </button>
         )}
@@ -329,7 +341,7 @@ function DayColumn({
             <ItemRow key={m.item.id} item={m.item} onOpen={() => onOpen(m.item)} draggable={canEdit} />
           ),
         )}
-        {!merged.length && <p className="tiny muted" style={{ padding: "0.6rem" }}>{canEdit ? "Drop plans here" : "Nothing yet"}</p>}
+        {!merged.length && <p className="tiny muted" style={{ padding: "0.6rem" }}>{canEdit ? voice.calendar.drop : "Nothing yet"}</p>}
       </div>
       {canEdit && !compact && (
         <form className="quick-add" onSubmit={quickAdd}>
@@ -395,7 +407,7 @@ const blank = {
 };
 
 function ItemModal({ target, onClose }: { target: ItineraryItem | { day: string | null } | null; onClose: () => void }) {
-  const { trip, rows, insert, update, remove, canEdit, goingIds, nameOf, colorOf, householdOf } = useTrip();
+  const { trip, rows, insert, update, remove, canEdit, goingIds, nameOf, colorOf, householdOf, voice } = useTrip();
   const existing = target && "id" in target ? target : null;
   const days = tripDays(trip?.start_date ?? null, trip?.end_date ?? null);
   const [form, setForm] = useState(blank);
@@ -465,7 +477,7 @@ function ItemModal({ target, onClose }: { target: ItineraryItem | { day: string 
     <Modal
       open={!!target}
       onClose={onClose}
-      title={live ? live.title : "Add a plan"}
+      title={live ? live.title : `Add ${voice.calendar.thing === "item" ? "something" : `a ${voice.calendar.thing}`}`}
       variant="panel"
       actions={reading && canEdit ? <button className="btn btn-sm" onClick={() => setEditMode(true)}><Pencil size={14} /> Edit</button> : undefined}
       footer={
@@ -476,7 +488,7 @@ function ItemModal({ target, onClose }: { target: ItineraryItem | { day: string 
                 className="btn btn-danger"
                 type="button"
                 onClick={async () => {
-                  if (confirm(`Remove "${existing.title}" from the itinerary?`)) {
+                  if (confirm(`Remove "${existing.title}" from the calendar?`)) {
                     await remove("itinerary_items", existing.id);
                     onClose();
                   }
@@ -493,12 +505,12 @@ function ItemModal({ target, onClose }: { target: ItineraryItem | { day: string 
       }
     >
       {reading && live ? (
-        <PlanDetails item={live} />
+        <PlanDetails item={live} onClose={onClose} />
       ) : (
         <form id="itin-form" className="form-grid" onSubmit={save}>
           <fieldset disabled={!canEdit} style={{ display: "contents" }}>
             <Field label="What" full>
-              <input className="input" value={form.title} onChange={(e) => set("title", e.target.value)} placeholder="Dinner at Turner's Seafood" required maxLength={200} />
+              <input className="input" value={form.title} onChange={(e) => set("title", e.target.value)} placeholder={voice.calendar.titlePlaceholder} required maxLength={200} />
             </Field>
             <Field label="Day">
               {days.length && !pickDate ? (
@@ -507,7 +519,7 @@ function ItemModal({ target, onClose }: { target: ItineraryItem | { day: string 
                   value={form.day}
                   onChange={(e) => (e.target.value === "__pick" ? setPickDate(true) : set("day", e.target.value))}
                 >
-                  <option value="">Unscheduled</option>
+                  <option value="">{voice.calendar.unscheduledTitle}</option>
                   {days.map((d, i) => <option key={d} value={d}>Day {i + 1} · {formatDay(d)}</option>)}
                   {form.day && !days.includes(form.day) && <option value={form.day}>{formatDay(form.day)}</option>}
                   <option value="__pick">Another date…</option>
@@ -518,7 +530,7 @@ function ItemModal({ target, onClose }: { target: ItineraryItem | { day: string 
             </Field>
             <Field label="Category">
               <select className="input" value={form.category} onChange={(e) => set("category", e.target.value)}>
-                {CATEGORIES.map((c) => <option key={c.id} value={c.id}>{c.emoji} {c.label}</option>)}
+                {voice.ideaCategories.map((c) => <option key={c.id} value={c.id}>{c.emoji} {c.label}</option>)}
               </select>
             </Field>
             <Field label="Starts">
@@ -530,7 +542,7 @@ function ItemModal({ target, onClose }: { target: ItineraryItem | { day: string 
             <Field label="Where" full>
               <PlaceSearch value={form.location} onChange={(p) => set("location", p)} near={near} />
             </Field>
-            <Field label="Who's doing this" hint="Everyone going is selected by default. Costs and splits follow this." full>
+            <Field label="Who's doing this" hint="Everyone is selected by default. Costs and splits follow this." full>
               <PersonPicker people={rows.trip_members.map((m) => m.user_id)} value={form.participants} onChange={(v) => set("participants", v)} nameOf={nameOf} colorOf={colorOf} />
             </Field>
             <CostEditor value={form.cost} onChange={(v) => set("cost", v)} participants={form.participants} currency={trip?.currency ?? "USD"} householdOf={householdOf} />
@@ -538,7 +550,7 @@ function ItemModal({ target, onClose }: { target: ItineraryItem | { day: string 
               <input className="input" value={form.url} onChange={(e) => set("url", e.target.value)} placeholder="Optional" />
             </Field>
             <Field label="Notes" full>
-              <textarea className="input textarea" value={form.notes} onChange={(e) => set("notes", e.target.value)} placeholder="Booking details, what to bring…" />
+              <textarea className="input textarea" value={form.notes} onChange={(e) => set("notes", e.target.value)} placeholder={voice.calendar.notesPlaceholder} />
             </Field>
           </fieldset>
           {existing && (link || existing.url) && (
@@ -553,7 +565,9 @@ function ItemModal({ target, onClose }: { target: ItineraryItem | { day: string 
   );
 }
 
-function PlanDetails({ item }: { item: ItineraryItem }) {
+function PlanDetails({ item, onClose }: { item: ItineraryItem; onClose?: () => void }) {
+  const { canEdit, hasModule, voice } = useTrip();
+  const backToIdeas = useBackToIdeas();
   const { trip, nameOf, colorOf, goingIds } = useTrip();
   const travel = useTravel();
   const money = useMoney();
@@ -596,6 +610,11 @@ function PlanDetails({ item }: { item: ItineraryItem }) {
         </div>
       )}
       {item.notes && <div className="detail-section"><h3>Notes</h3><p className="detail-notes small">{item.notes}</p></div>}
+      {canEdit && hasModule("ideas") && (
+        <button className="btn btn-sm" style={{ alignSelf: "flex-start" }} onClick={() => void backToIdeas(item).then((ok) => ok && onClose?.())}>
+          <Undo2 size={14} /> Back to {voice.ideas.thing === "idea" ? "ideas" : `${voice.ideas.thing}s`}
+        </button>
+      )}
       <LinkedMemories type="itinerary" id={item.id} />
       <PaymentPanel type="itinerary" id={item.id} category="activities" />
       <div className="detail-section">
@@ -652,6 +671,17 @@ function TrayIdea({ idea, up, onTap }: { idea: Idea; up: number; onTap: () => vo
       {up > 0 && <span className="tiny muted row" style={{ gap: 2 }}><ThumbsUp size={11} />{up}</span>}
     </div>
   );
+}
+
+/** "Today", "Tomorrow", "This week" or "Next week": for ongoing calendars. */
+function relativeDay(day: string): string {
+  const diff = daysBetween(todayString(), day);
+  if (diff === 0) return "Today";
+  if (diff === 1) return "Tomorrow";
+  if (diff < 0) return diff === -1 ? "Yesterday" : parseMonth(day);
+  if (diff < 7) return "This week";
+  if (diff < 14) return "Next week";
+  return parseMonth(day);
 }
 
 function parseMonth(day: string) {

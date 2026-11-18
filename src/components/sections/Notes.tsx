@@ -17,7 +17,7 @@ import type { Note } from "@/lib/types";
 type Tab = "shared" | "private" | "journal";
 
 export function NotesSection({ compact = false }: { compact?: boolean }) {
-  const { rows, me, canEdit, insert, tripId } = useTrip();
+  const { rows, me, canEdit, insert, tripId, voice } = useTrip();
   const [tab, setTab] = useState<Tab>("shared");
   const [openId, setOpenId] = useState<string | null>(null);
   // Opened from a plan or stay ("Photos & notes").
@@ -84,7 +84,7 @@ export function NotesSection({ compact = false }: { compact?: boolean }) {
       <div className="section-head">
         <div>
           <ModuleTitle id="notes" fallback="Notes & journal" />
-          <p>Shared notes for the group, private notes for you, and a journal for the memories.</p>
+          <p>{voice.notes.hint}</p>
         </div>
         {canCreate && <button className="btn btn-primary" onClick={create}><Plus size={16} /> {tab === "journal" ? "New entry" : "New note"}</button>}
       </div>
@@ -102,7 +102,7 @@ export function NotesSection({ compact = false }: { compact?: boolean }) {
           {list.length === 0 && (
             <div className="card">
               <EmptyState icon={tab === "journal" ? <BookOpen /> : <NotebookPen />} title={tab === "journal" ? "No entries yet" : "No notes yet"}>
-                {tab === "journal" ? "Write a little each day. It becomes your scrapbook later." : "Door codes, ideas, reminders…"}
+                {tab === "journal" ? voice.notes.journalEmpty : "Ideas, reminders, anything worth keeping…"}
               </EmptyState>
             </div>
           )}
@@ -133,7 +133,7 @@ function NoteListItem({ note, active, onClick }: { note: Note; active: boolean; 
 }
 
 function NoteEditor({ note, onDeleted }: { note: Note; onDeleted: () => void }) {
-  const { update, remove, canEdit, me, nameOf } = useTrip();
+  const { update, remove, canEdit, me, nameOf, voice } = useTrip();
   const editable = note.created_by === me || (canEdit && note.visibility !== "private");
   const [title, setTitle] = useState(note.title);
   return (
@@ -164,7 +164,7 @@ function NoteEditor({ note, onDeleted }: { note: Note; onDeleted: () => void }) 
         rows={16}
         disabled={!editable}
         className="journal-body"
-        placeholder={note.kind === "journal" ? "What happened today? What did it smell like, taste like, feel like?" : "Start typing. It saves automatically."}
+        placeholder={note.kind === "journal" ? voice.notes.journalPrompt : "Start typing. It saves automatically."}
       />
       <div className="note-meta">
         <Field label="Who can see it">
@@ -175,7 +175,7 @@ function NoteEditor({ note, onDeleted }: { note: Note; onDeleted: () => void }) 
             onChange={(v) => update("notes", note.id, v)}
           />
         </Field>
-        <Field label="Attached to" hint="Shows with that plan, stay or flight, and in its scrapbook chapter.">
+        <Field label="Attached to" hint={voice.attachHint}>
           {editable ? (
             <AttachPicker type={note.linked_type} id={note.linked_id} onChange={(t, id) => update("notes", note.id, { linked_type: t, linked_id: id })} />
           ) : (
