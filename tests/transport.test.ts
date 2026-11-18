@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { dropOff, endLabel, endPoint, modeOf, routeText, transportTitle } from "@/lib/transport";
+import { directionsThrough, dropOff, endLabel, endPoint, formatWait, journeyKm, journeyLegs, layovers, modeOf, routeText, transportTitle, viaText } from "@/lib/transport";
 import { flightLegs, groupFlights } from "@/lib/travel";
 
 const blank = { from_code: "", from_name: "", to_code: "", to_name: "", airline: "", flight_number: "" };
@@ -47,5 +47,51 @@ describe("transport modes", () => {
   it("groups by type in a fixed order", () => {
     const fl = [{ id: "1", status: "booked" as const, depart_local: null, travelers: [], mode: "rental" }, { id: "2", status: "booked" as const, depart_local: null, travelers: [], mode: "flight" }];
     expect(groupFlights(fl, "mode", (x) => x).map((g) => g.title)).toEqual(["✈️ Flight", "🚗 Rental car"]);
+  });
+});
+
+describe("stops and layovers", () => {
+  const air = (c: string) => ({ BOS: { lat: 42.36, lng: -71.0 }, ORD: { lat: 41.98, lng: -87.9 }, LAX: { lat: 33.94, lng: -118.4 } })[c] ?? null;
+  const trip = {
+    ...blank, mode: "flight", airline: "United", flight_number: "UA 100",
+    from_code: "BOS", to_code: "LAX", depart_local: "2027-03-10T08:00", arrive_local: "2027-03-10T14:30",
+    stops: [{ id: "s1", name: "Chicago O'Hare", code: "ORD", arrive_local: "2027-03-10T09:45", depart_local: "2027-03-10T10:20", number: "UA 200" }],
+  };
+
+  it("splits a journey into legs, keeping the carrier unless it changes", () => {
+    const legs = journeyLegs(trip, air);
+    expect(legs.map((l) => `${l.from.label}-${l.to.label} ${l.carrier} ${l.number}`)).toEqual(["BOS-ORD United UA 100", "ORD-LAX United UA 200"]);
+    expect(Math.round(journeyKm(trip, air)!)).toBeGreaterThan(Math.round(legs[1].km!));
+  });
+
+  it("times each layover and flags tight connections", () => {
+    expect(layovers(trip)).toMatchObject([{ minutes: 35, warn: "tight", overnight: false }]);
+    const ok = { ...trip, stops: [{ ...trip.stops[0], depart_local: "2027-03-10T11:30" }] };
+    expect(layovers(ok)[0]).toMatchObject({ minutes: 105, warn: null });
+    const long = { ...trip, stops: [{ ...trip.stops[0], depart_local: "2027-03-10T19:00" }] };
+    expect(layovers(long)[0].warn).toBe("long");
+    const night = { ...trip, stops: [{ ...trip.stops[0], depart_local: "2027-03-11T07:00" }] };
+    expect(layovers(night)[0]).toMatchObject({ overnight: true, warn: null });
+    expect(formatWait(130)).toBe("2h 10m");
+  });
+
+  it("train connections allow shorter changes; drives never warn", () => {
+    const train = { ...trip, mode: "train", stops: [{ id: "s", name: "New Haven", arrive_local: "2027-03-10T09:00", depart_local: "2027-03-10T09:20" }] };
+    expect(layovers(train)[0].warn).toBeNull();
+    const drive = { ...train, mode: "drive", stops: [{ id: "s", name: "Diner", arrive_local: "2027-03-10T09:00", depart_local: "2027-03-10T09:05" }] };
+    expect(layovers(drive)[0].warn).toBeNull();
+  });
+
+  it("names the stops", () => {
+    expect(viaText(trip)).toBe("via ORD");
+    expect(viaText({ stops: [{ id: "a", name: "Denver, CO" }, { id: "b", name: "Moab" }] })).toBe("via Denver & Moab");
+    expect(viaText({ stops: [] })).toBe("");
+  });
+
+  it("builds directions through every stop", () => {
+    const url = directionsThrough([{ lat: 1, lng: 2 }, { lat: 3, lng: 4 }, null, { lat: 5, lng: 6 }])!;
+    expect(url).toContain("origin=1,2");
+    expect(url).toContain("destination=5,6");
+    expect(decodeURIComponent(url)).toContain("waypoints=3,4");
   });
 });

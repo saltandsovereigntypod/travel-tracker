@@ -1,8 +1,8 @@
 // Every way of getting from A to B: flights, trains, buses, ferries, rental cars,
 // rideshares and driving. They share one table (`flights`); `mode` picks the words.
 
-import type { LatLng } from "./geo";
-import type { Flight } from "./types";
+import { distanceKm, type LatLng } from "./geo";
+import type { Flight, TransportStop } from "./types";
 
 export type TransportMode = "flight" | "train" | "bus" | "ferry" | "rental" | "rideshare" | "drive" | "other";
 
@@ -182,4 +182,144 @@ export function endPoint(
   // A rental with no drop-off goes back to the pick-up.
   if (side === "to" && f.mode === "rental") return endPoint(f, "from", airport);
   return null;
+}
+
+// ---- Stops, legs and layovers ----------------------------------------------------
+
+type Journey = Ends &
+  Pick<Flight, "airline" | "flight_number" | "depart_local" | "arrive_local"> &
+  Partial<Pick<Flight, "from_lat" | "from_lng" | "to_lat" | "to_lng">> & { mode?: string | null; stops?: TransportStop[] | null };
+
+export interface JourneyPoint {
+  label: string;
+  name: string;
+  at: LatLng | null;
+  arrive: string | null;
+  depart: string | null;
+  /** Index in `stops`, or -1 for the start and -2 for the end. */
+  stop: number;
+  overnight: boolean;
+}
+
+export interface Leg {
+  from: JourneyPoint;
+  to: JourneyPoint;
+  carrier: string;
+  number: string;
+  km: number | null;
+}
+
+/** Can stops on this kind of trip be layovers (connections) rather than places you stop at? */
+export const connects = (mode?: string | null) => ["flight", "train", "bus", "ferry", "other"].includes(mode || "flight");
+
+const stopPoint = (s: TransportStop, i: number, airport: (code: string) => LatLng | null): JourneyPoint => ({
+  label: s.code?.trim() || s.name.split(",")[0].trim() || "Stop",
+  name: s.name,
+  at: s.lat != null && s.lng != null ? { lat: s.lat, lng: s.lng } : s.code?.trim() ? airport(s.code.trim().toUpperCase()) : null,
+  arrive: s.arrive_local ?? null,
+  depart: s.depart_local ?? null,
+  stop: i,
+  overnight: !!s.overnight,
+});
+
+/** Start, every stop, then the end. */
+export function journeyPoints(f: Journey, airport: (code: string) => LatLng | null = () => null): JourneyPoint[] {
+  const stops = f.stops ?? [];
+  const full = (side: "from" | "to") => (side === "from" ? f.from_name : f.to_name || (f.mode === "rental" ? f.from_name : ""));
+  return [
+    { label: endLabel(f, "from"), name: full("from"), at: endPoint(f, "from", airport), arrive: null, depart: f.depart_local, stop: -1, overnight: false },
+    ...stops.map((s, i) => stopPoint(s, i, airport)),
+    { label: dropOff(f), name: full("to"), at: endPoint(f, "to", airport), arrive: f.arrive_local, depart: null, stop: -2, overnight: false },
+  ];
+}
+
+/** Each leg between consecutive points, with who runs it and how far it is. */
+export function journeyLegs(f: Journey, airport: (code: string) => LatLng | null = () => null): Leg[] {
+  const pts = journeyPoints(f, airport);
+  const stops = f.stops ?? [];
+  return pts.slice(1).map((to, i) => {
+    const from = pts[i];
+    const leaving = i === 0 ? null : stops[i - 1];
+    return {
+      from,
+      to,
+      // A connection keeps the same carrier unless you say otherwise.
+      carrier: leaving?.carrier?.trim() || f.airline,
+      number: i === 0 ? f.flight_number : leaving?.number?.trim() ?? "",
+      km: from.at && to.at ? distanceKm(from.at, to.at) : null,
+    };
+  });
+}
+
+/** Total distance through every stop (null if any end isn't on the map). */
+export function journeyKm(f: Journey, airport: (code: string) => LatLng | null = () => null): number | null {
+  const legs = journeyLegs(f, airport);
+  if (!legs.length || legs.some((l) => l.km == null)) return null;
+  return legs.reduce((n, l) => n + (l.km ?? 0), 0);
+}
+
+export interface Layover {
+  stop: TransportStop;
+  index: number;
+  minutes: number | null;
+  /** Arrive one day, leave a later one. */
+  overnight: boolean;
+  /** "tight": a connection that looks too short; "short": cutting it fine; "long": a long wait. */
+  warn: "tight" | "short" | "long" | null;
+}
+
+/** Midnight means "time not set yet". */
+const timed = (t: string | null | undefined): t is string => !!t && t.length > 10 && t.slice(11, 16) !== "00:00";
+const minutesBetween = (a: string | null | undefined, b: string | null | undefined) =>
+  timed(a) && timed(b) ? Math.round((new Date(b).getTime() - new Date(a).getTime()) / 60000) : null;
+
+/** Minimum comfortable connection, by kind of trip. */
+const MIN_CONNECTION: Record<string, [tight: number, short: number]> = {
+  flight: [40, 60],
+  train: [8, 15],
+  bus: [8, 15],
+  ferry: [15, 30],
+  other: [10, 20],
+};
+
+/** How long you wait at each stop, and whether a connection looks risky. */
+export function layovers(f: Journey): Layover[] {
+  const mode = f.mode || "flight";
+  const [tight, short] = MIN_CONNECTION[mode] ?? [0, 0];
+  return (f.stops ?? []).map((stop, index) => {
+    const minutes = minutesBetween(stop.arrive_local, stop.depart_local);
+    const overnight = !!stop.overnight || (!!stop.arrive_local && !!stop.depart_local && stop.arrive_local.slice(0, 10) !== stop.depart_local.slice(0, 10));
+    let warn: Layover["warn"] = null;
+    if (connects(mode) && minutes != null && !overnight) {
+      if (minutes < tight) warn = "tight";
+      else if (minutes < short) warn = "short";
+      else if (minutes >= 8 * 60) warn = "long";
+    }
+    return { stop, index, minutes: minutes != null && minutes >= 0 ? minutes : null, overnight, warn };
+  });
+}
+
+/** "2h 10m". */
+export function formatWait(min: number): string {
+  const h = Math.floor(min / 60);
+  const m = min % 60;
+  return h ? (m ? `${h}h ${m}m` : `${h}h`) : `${m}m`;
+}
+
+/** "via ORD", "via ORD & DEN", "3 stops". */
+export function viaText(f: { stops?: TransportStop[] | null }): string {
+  const stops = f.stops ?? [];
+  if (!stops.length) return "";
+  const names = stops.map((s) => s.code?.trim() || s.name.split(",")[0].trim()).filter(Boolean);
+  if (names.length > 3 || names.length < stops.length) return `${stops.length} stop${stops.length === 1 ? "" : "s"}`;
+  return `via ${names.length === 1 ? names[0] : `${names.slice(0, -1).join(", ")} & ${names[names.length - 1]}`}`;
+}
+
+/** Google Maps directions through every stop, for drives and rides. */
+export function directionsThrough(points: (LatLng | null)[], mode: "driving" | "transit" = "driving"): string | null {
+  const pts = points.filter((p): p is LatLng => !!p);
+  if (pts.length < 2) return null;
+  const s = (p: LatLng) => `${p.lat},${p.lng}`;
+  const mid = pts.slice(1, -1).map(s).join("|");
+  return `https://www.google.com/maps/dir/?api=1&origin=${s(pts[0])}&destination=${s(pts[pts.length - 1])}${mid ? `&waypoints=${encodeURIComponent(mid)}` : ""}&travelmode=${mode}`;
 }

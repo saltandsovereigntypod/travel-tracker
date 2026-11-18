@@ -58,10 +58,9 @@ export function estimatedFromOptions<T extends { id: string; status: string }>(g
 
 // ---- Nights and airports ---------------------------------------------------
 
-/** Where you're sleeping on the night of `day` (booked wins over options). */
+/** Where you're sleeping on the night of `day`. Only booked stays count: options you're still comparing aren't where you're staying yet. */
 export function stayForNight<S extends Pick<Stay, "status" | "check_in" | "check_out">>(stays: S[], day: string): S | null {
-  const hits = stays.filter((s) => s.status !== "cancelled" && s.check_in && s.check_out && s.check_in <= day && day < s.check_out);
-  return hits.find((s) => s.status === "booked") ?? hits[0] ?? null;
+  return stays.find((s) => s.status === "booked" && s.check_in && s.check_out && s.check_in <= day && day < s.check_out) ?? null;
 }
 
 /** Same, but the morning after the last night still counts (checkout day plans start from there). */

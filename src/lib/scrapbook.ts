@@ -2,9 +2,9 @@
 // notes and photos, plus each person's design choices. Pure, so it can be tested.
 
 import { daysBetween, tripDays } from "./format";
-import { distanceKm, type LatLng } from "./geo";
+import type { LatLng } from "./geo";
 import { photoDay } from "./memories";
-import { endPoint } from "./transport";
+import { journeyKm } from "./transport";
 import type { Flight, ItineraryItem, Note, Photo, Stay } from "./types";
 
 export type ScrapStyle = "keepsake" | "modern" | "vintage" | "spooky" | "botanical";
@@ -228,14 +228,14 @@ export function tripNumbers(
   let ground = 0;
   for (const f of src.flights) {
     if (f.status !== "booked") continue;
-    const a = endPoint(f, "from", airport);
-    const b = endPoint(f, "to", airport);
-    if (!a || !b) continue;
+    // Through every layover or stop on the way.
+    const d = journeyKm(f, airport);
+    if (d == null) continue;
     if ((f.mode ?? "flight") === "flight") {
-      km += distanceKm(a, b);
+      km += d;
       any = true;
     } else {
-      ground += distanceKm(a, b);
+      ground += d;
     }
   }
   const places = new Set(

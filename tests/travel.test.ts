@@ -67,11 +67,14 @@ describe("options", () => {
 describe("nights and airports", () => {
   const s1 = stay({ id: "s1", status: "booked", check_in: "2027-10-20", check_out: "2027-10-27" });
   const s2 = stay({ id: "s2", status: "idea", check_in: "2027-10-27", check_out: "2027-11-02" });
-  it("knows where you sleep", () => {
+  it("knows where you sleep (booked stays only)", () => {
     expect(stayForNight([s1, s2], "2027-10-26")!.id).toBe("s1");
-    expect(stayForNight([s1, s2], "2027-10-27")!.id).toBe("s2");
+    // s2 is only an option, so that night isn't covered yet.
+    expect(stayForNight([s1, s2], "2027-10-27")).toBeNull();
     expect(stayForNight([s1, s2], "2027-11-02")).toBeNull();
-    expect(stayForDay([s1, s2], "2027-11-02")!.id).toBe("s2");
+    // The morning after your last booked night still counts.
+    expect(stayForDay([s1, s2], "2027-10-27")!.id).toBe("s1");
+    expect(stayForDay([s1, { ...s2, status: "booked" }], "2027-11-02")!.id).toBe("s2");
   });
   it("pairs stays with airports", () => {
     const fl = [
