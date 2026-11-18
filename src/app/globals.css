@@ -425,6 +425,13 @@ input[type="checkbox"] { accent-color: var(--accent); width: 18px; height: 18px;
 .pass-stub { padding: 1rem; border-left: 2px dashed var(--border); display: flex; flex-direction: column; justify-content: center; align-items: center; min-width: 110px; gap: 0.2rem; text-align: center; }
 .pass-route { display: flex; align-items: center; gap: 0.8rem; }
 .pass-code { font-family: var(--font-heading); font-size: 1.9rem; font-weight: 700; letter-spacing: 0.02em; }
+/* Station and place names are longer than airport codes. */
+.pass-code.pass-place { font-size: 1.15rem; line-height: 1.2; letter-spacing: 0; max-width: 11rem; overflow-wrap: anywhere; }
+.mode-picker { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.mode-picker button { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 0.55rem 0.25rem; border: 1px solid var(--border); border-radius: calc(var(--radius) * 0.5 + 2px); background: var(--surface); color: var(--text); font-size: 0.78rem; line-height: 1.15; text-align: center; cursor: pointer; }
+@media (hover: hover) { .mode-picker button:hover { border-color: var(--accent); } }
+.mode-picker button.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--surface)); color: var(--accent); font-weight: 600; }
+.mode-picker button svg { color: currentColor; }
 .pass-line { flex: 1; height: 2px; background: repeating-linear-gradient(90deg, var(--muted) 0 6px, transparent 6px 12px); position: relative; }
 .pass-line svg { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); background: var(--surface); color: var(--accent); padding: 0 4px; }
 @media (max-width: 520px) { .pass { grid-template-columns: 1fr; } .pass-stub { border-left: 0; border-top: 2px dashed var(--border); flex-direction: row; justify-content: space-between; } }

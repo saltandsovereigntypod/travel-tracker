@@ -4,6 +4,7 @@
 import { distanceKm, hasCoords } from "./geo";
 import type { Flight, Idea, ItineraryItem, MemoryLink, Photo, Stay, Visibility } from "./types";
 import type { ListItem } from "./fields";
+import { transportTitle } from "./transport";
 
 export interface Visible {
   visibility?: Visibility;
@@ -59,7 +60,7 @@ export function linkTitle(type: MemoryLink | null | undefined, id: string | null
       return rows.list_items.find((i) => i.id === id)?.title || null;
     case "flight": {
       const f = rows.flights.find((x) => x.id === id);
-      return f ? `${f.from_code || f.from_name} → ${f.to_code || f.to_name} flight` : null;
+      return f ? transportTitle(f) : null;
     }
   }
 }

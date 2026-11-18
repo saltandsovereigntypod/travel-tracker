@@ -136,9 +136,9 @@ describe("grouping flights", () => {
     const { flightLegs, groupFlights } = await import("@/lib/travel");
     expect(flightLegs(fl)).toEqual({ "1": "out", "2": "out", "3": "return", "4": "during" });
     expect(groupFlights(fl, "direction", (x) => x).map((g) => [g.title, g.flights.map((f) => f.id)])).toEqual([
-      ["Flights out", ["1", "2"]],
+      ["Getting there", ["1", "2"]],
       ["During the trip", ["4"]],
-      ["Flights home", ["3"]],
+      ["Getting home", ["3"]],
     ]);
   });
   it("groups by person, a shared flight under each", async () => {

@@ -6,7 +6,7 @@ import {
   DndContext, DragOverlay, PointerSensor, TouchSensor, KeyboardSensor, useDraggable, useDroppable, useSensor, useSensors,
   type DragEndEvent, type DragStartEvent,
 } from "@dnd-kit/core";
-import { Plus, Plane, BedDouble, MapPin, ExternalLink, Trash2, CalendarDays, Clock, MessageCircle, Pencil, Undo2 } from "lucide-react";
+import { Plus, BedDouble, MapPin, ExternalLink, Trash2, CalendarDays, Clock, MessageCircle, Pencil, Undo2 } from "lucide-react";
 import clsx from "clsx";
 import { LinkedMemories } from "../memories/Memories";
 import { useTrip } from "../TripProvider";
@@ -33,10 +33,14 @@ import { calendarEntries } from "@/lib/fields";
 import { pageTasks } from "@/lib/pages";
 import { useTravel } from "../travel/useTravel";
 import { CardOptions, useCardChoice, useCardParts } from "../ui/CardOptions";
+import { dropOff, modeOf, routeText } from "@/lib/transport";
+import { ModeIcon } from "../travel/ModeIcon";
 
 interface FixedEvent {
   key: string;
   kind: "flight" | "stay" | "list";
+  /** For travel: flight, train, rental car… */
+  mode?: string;
   time: string | null;
   title: string;
   sub: string;
@@ -58,9 +62,12 @@ export function useFixedEvents() {
       if (f.status === "cancelled") continue;
       const dep = splitLocal(f.depart_local);
       const arr = splitLocal(f.arrive_local);
-      const label = [f.airline, f.flight_number].filter(Boolean).join(" ") || "Flight";
-      add(dep.day, { key: `f-${f.id}-d`, kind: "flight", time: dep.time, title: `${label}: ${f.from_code || f.from_name} → ${f.to_code || f.to_name}`, sub: "Departs" });
-      if (arr.day && arr.day !== dep.day) add(arr.day, { key: `f-${f.id}-a`, kind: "flight", time: arr.time, title: `${label} lands in ${f.to_code || f.to_name}`, sub: "Arrives" });
+      const m = modeOf(f);
+      const label = [f.airline, m.number ? f.flight_number : ""].filter(Boolean).join(" ") || m.label;
+      const route = routeText(f);
+      const sub = f.status === "idea" ? "Not booked yet" : m.depart;
+      add(dep.day, { key: `f-${f.id}-d`, kind: "flight", mode: m.id, time: dep.time, title: route ? `${label}${route.startsWith("at ") ? " " : ": "}${route}` : label, sub });
+      if (arr.day && arr.day !== dep.day) add(arr.day, { key: `f-${f.id}-a`, kind: "flight", mode: m.id, time: arr.time, title: `${label} ${m.arrivesIn} ${dropOff(f) || "?"}`, sub: m.arrive });
     }
     for (const s of rows.stays) {
       if (s.status === "cancelled") continue;
@@ -694,7 +701,7 @@ function FixedRow({ e }: { e: FixedEvent }) {
     <>
       <span className="itin-time">{formatTime(e.time) || "—"}</span>
       <span className="cat-dot" style={{ background: "var(--surface)" }}>
-        {e.kind === "flight" ? <Plane size={15} /> : e.kind === "stay" ? <BedDouble size={15} /> : <span aria-hidden>{e.icon}</span>}
+        {e.kind === "flight" ? <ModeIcon mode={e.mode} size={15} /> : e.kind === "stay" ? <BedDouble size={15} /> : <span aria-hidden>{e.icon}</span>}
       </span>
       <div className="grow">
         <strong className="small">{e.title}</strong>

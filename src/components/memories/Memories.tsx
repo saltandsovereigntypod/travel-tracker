@@ -8,6 +8,7 @@ import { PersonPicker, Segmented } from "../ui/Fields";
 import { canSee, LINK_ICONS, linkTitle, matchPlan, visibilityLabel, withHouseholds } from "@/lib/memories";
 import { formatDay } from "@/lib/format";
 import type { MemoryLink, Note, Visibility } from "@/lib/types";
+import { modeOf, transportTitle } from "@/lib/transport";
 
 /** Who can see this: everyone, only me, or people I pick (couples come as a pair). Only the owner can change it. */
 export function VisibilityControl({
@@ -89,7 +90,7 @@ export function AttachPicker({ type, id, onChange, disabled }: { type: MemoryLin
       )}
       {rows.flights.filter((f) => f.status !== "cancelled").length > 0 && (
         <optgroup label="Flights">
-          {rows.flights.filter((f) => f.status !== "cancelled").map((f) => <option key={f.id} value={`flight:${f.id}`}>{f.from_code || f.from_name} → {f.to_code || f.to_name}{f.depart_local ? ` · ${formatDay(f.depart_local.slice(0, 10))}` : ""}</option>)}
+          {rows.flights.filter((f) => f.status !== "cancelled").map((f) => <option key={f.id} value={`flight:${f.id}`}>{modeOf(f).emoji} {transportTitle(f)}{f.depart_local ? ` · ${formatDay(f.depart_local.slice(0, 10))}` : ""}</option>)}
         </optgroup>
       )}
       {rows.ideas.length > 0 && (

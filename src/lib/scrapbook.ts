@@ -4,6 +4,7 @@
 import { daysBetween, tripDays } from "./format";
 import { distanceKm, type LatLng } from "./geo";
 import { photoDay } from "./memories";
+import { endPoint } from "./transport";
 import type { Flight, ItineraryItem, Note, Photo, Stay } from "./types";
 
 export type ScrapStyle = "keepsake" | "modern" | "vintage" | "spooky" | "botanical";
@@ -211,6 +212,8 @@ export interface Numbers {
   photos: number;
   entries: number;
   milesFlown: number | null;
+  /** Trains, buses, ferries, cars and rides. */
+  milesOverland: number | null;
   places: number;
 }
 
@@ -222,13 +225,17 @@ export function tripNumbers(
   const nights = src.stays.filter((s) => s.status === "booked" && s.check_in && s.check_out).reduce((n, s) => n + daysBetween(s.check_in!, s.check_out!), 0);
   let km = 0;
   let any = false;
+  let ground = 0;
   for (const f of src.flights) {
     if (f.status !== "booked") continue;
-    const a = airport(f.from_code);
-    const b = airport(f.to_code);
-    if (a && b) {
+    const a = endPoint(f, "from", airport);
+    const b = endPoint(f, "to", airport);
+    if (!a || !b) continue;
+    if ((f.mode ?? "flight") === "flight") {
       km += distanceKm(a, b);
       any = true;
+    } else {
+      ground += distanceKm(a, b);
     }
   }
   const places = new Set(
@@ -244,6 +251,7 @@ export function tripNumbers(
     photos: src.photos.length,
     entries: src.notes.filter((n) => n.kind === "journal").length,
     milesFlown: any ? Math.round(km * 0.621371) : null,
+    milesOverland: ground >= 1 ? Math.round(ground * 0.621371) : null,
     places,
   };
 }

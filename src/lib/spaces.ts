@@ -34,7 +34,7 @@ export const MODULES: ModuleDef[] = [
   { id: "notes", label: "Notes & journal", description: "Shared notes, private notes and a journal", slug: "notes" },
   { id: "photos", label: "Photos", description: "A shared photo album", slug: "photos" },
   { id: "scrapbook", label: "Scrapbook", description: "A printable keepsake of it all", slug: "scrapbook" },
-  { id: "flights", label: "Flights", description: "Flights with times, seats and confirmation codes", slug: "flights" },
+  { id: "flights", label: "Getting around", description: "Flights, trains, buses, ferries, rental cars, rides and drives", slug: "flights" },
   { id: "stays", label: "Stays", description: "Hotels, rentals and places to stay", slug: "stays" },
 ];
 

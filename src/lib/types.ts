@@ -1,3 +1,4 @@
+import type { TransportMode } from "./transport";
 // Row shapes for Driftbook's Supabase tables. Kept in sync with supabase/migrations.
 
 export type Role = "owner" | "editor" | "viewer";
@@ -136,6 +137,13 @@ export interface ItineraryItem extends CostFields {
 export interface Flight extends CostFields {
   id: string;
   trip_id: string;
+  /** Flight, train, bus, ferry, rental car, rideshare, drive… (lib/transport). */
+  mode: TransportMode;
+  /** Pins for places that aren't airports (stations, ports, addresses). */
+  from_lat?: number | null;
+  from_lng?: number | null;
+  to_lat?: number | null;
+  to_lng?: number | null;
   airline: string;
   flight_number: string;
   from_code: string;

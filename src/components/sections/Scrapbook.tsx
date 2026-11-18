@@ -141,6 +141,7 @@ export function ScrapbookSection() {
                   [numbers.photos, numbers.photos === 1 ? "photo" : "photos"],
                   [numbers.entries, numbers.entries === 1 ? "journal entry" : "journal entries"],
                   ...(numbers.milesFlown ? [[numbers.milesFlown.toLocaleString(), "miles flown"]] : []),
+                  ...(numbers.milesOverland ? [[numbers.milesOverland.toLocaleString(), "miles by road, rail & sea"]] : []),
                 ]
                   .filter(([n]) => Number(String(n).replace(/,/g, "")) > 0)
                   .map(([n, label]) => (

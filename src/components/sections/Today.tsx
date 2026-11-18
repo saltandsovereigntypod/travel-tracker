@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Plane, BedDouble, MapPin, Sun, Lightbulb } from "lucide-react";
+import { BedDouble, MapPin, Sun, Lightbulb } from "lucide-react";
 import { useTrip } from "../TripProvider";
 import { categoryOf } from "@/lib/categories";
 import { assignedTo, calendarEntries, isDone } from "@/lib/fields";
@@ -10,6 +10,8 @@ import { addDays, countdown, daysBetween, formatDayLong, formatTime, todayString
 import { mapsLink } from "@/lib/services";
 import { itemsForDay, useFixedEvents } from "./Itinerary";
 import { useIdeaScores } from "./Ideas";
+import { modeOf, routeText } from "@/lib/transport";
+import { ModeIcon } from "../travel/ModeIcon";
 
 export function Countdown({ big = false }: { big?: boolean }) {
   const { trip, noun, voice, rows } = useTrip();
@@ -92,7 +94,7 @@ export function TodaySection({ compact = false }: { compact?: boolean }) {
 
   const unbooked = !hasModule("flights") && !hasModule("stays") ? [] : [
     ...rows.stays.filter((s) => s.status === "idea").map((s) => `Book a stay: ${s.name}`),
-    ...rows.flights.filter((f) => f.status === "idea").map((f) => `Book flight ${f.from_code || ""}→${f.to_code || ""}`),
+    ...rows.flights.filter((f) => f.status === "idea").map((f) => `Book ${modeOf(f).noun} ${routeText(f)}`.trim()),
   ];
   const topIdeas = rows.ideas
     .filter((i) => i.status === "open" || i.status === "maybe")
@@ -120,7 +122,7 @@ export function TodaySection({ compact = false }: { compact?: boolean }) {
             {events.map((e) => (
               <div key={e.key} className="itin-item itin-fixed">
                 <span className="itin-time">{formatTime(e.time) || "—"}</span>
-                {e.kind === "flight" ? <Plane size={16} /> : e.kind === "stay" ? <BedDouble size={16} /> : <span aria-hidden>{e.icon}</span>}
+                {e.kind === "flight" ? <ModeIcon mode={e.mode} size={16} /> : e.kind === "stay" ? <BedDouble size={16} /> : <span aria-hidden>{e.icon}</span>}
                 <strong className="small grow">{e.title}</strong>
               </div>
             ))}

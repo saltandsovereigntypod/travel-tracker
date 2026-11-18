@@ -46,8 +46,8 @@ export const CARD_PARTS = {
     { id: "link", label: "Link", off: true, blockOff: true },
   ],
   flights: [
-    { id: "options", label: "Flights you're still deciding on" },
-    { id: "travelers", label: "Who's on each flight" },
+    { id: "options", label: "Options you're still deciding on" },
+    { id: "travelers", label: "Who's going on each" },
     { id: "confirmation", label: "Confirmation code" },
     { id: "seats", label: "Seats", blockOff: true },
     { id: "price", label: "Price & payment" },
@@ -97,7 +97,7 @@ export const CARD_CHOICES: Partial<Record<CardKind, CardChoice[]>> = {
     { id: "days", label: "Days to show", def: "3", only: "block", options: [{ value: "1", label: "Next day" }, { value: "3", label: "Next 3" }, { value: "7", label: "Next 7" }, { value: "all", label: "All" }] },
   ],
   flights: [
-    { id: "group", label: "Group by", def: "none", options: [{ value: "none", label: "Nothing" }, { value: "direction", label: "Out & return" }, { value: "person", label: "Person" }] },
+    { id: "group", label: "Group by", def: "none", options: [{ value: "none", label: "Nothing" }, { value: "direction", label: "There & back" }, { value: "mode", label: "Type (flight, train…)" }, { value: "person", label: "Person" }] },
   ],
   stays: [
     { id: "group", label: "Group by", def: "none", options: [{ value: "none", label: "Nothing" }, { value: "status", label: "Booked & options" }] },

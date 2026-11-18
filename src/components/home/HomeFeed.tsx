@@ -11,6 +11,7 @@ import { expenseShares, netBalances } from "@/lib/balances";
 import { templateFor } from "@/lib/spaces";
 import { pageTasks, type Page } from "@/lib/pages";
 import type { Expense, Flight, ItineraryItem, Member, PackingItem, Stay, Trip } from "@/lib/types";
+import { modeOf, transportTitle } from "@/lib/transport";
 
 interface Data {
   members: Member[];
@@ -93,7 +94,7 @@ export function HomeFeed({ spaces }: { spaces: Trip[] }) {
     for (const p of data.plans) week.push({ key: `p${p.id}`, day: p.day!, time: p.start_time, title: p.title, sub: space(p.trip_id).name, icon: icon(p.trip_id), href: `/trips/${p.trip_id}/itinerary` });
     for (const f of data.flights) {
       const d = splitLocal(f.depart_local);
-      week.push({ key: `f${f.id}`, day: d.day!, time: d.time, title: `✈️ ${f.from_code || f.from_name} → ${f.to_code || f.to_name}`, sub: space(f.trip_id).name, icon: icon(f.trip_id), href: `/trips/${f.trip_id}/flights` });
+      week.push({ key: `f${f.id}`, day: d.day!, time: d.time, title: `${modeOf(f).emoji} ${transportTitle(f)}`, sub: space(f.trip_id).name, icon: icon(f.trip_id), href: `/trips/${f.trip_id}/flights` });
     }
     for (const s of data.stays) {
       if (s.check_in && s.check_in >= today && s.check_in <= weekEnd) week.push({ key: `si${s.id}`, day: s.check_in, time: s.check_in_time, title: `Check in: ${s.name}`, sub: space(s.trip_id).name, icon: icon(s.trip_id), href: `/trips/${s.trip_id}/stays` });
